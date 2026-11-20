@@ -1,0 +1,21 @@
+{
+  "count": 2,
+  "results": [
+    {
+      "listing_id": 1234567890,
+      "title": "Handmade Leather Headphone Stand",
+      "state": "active",
+      "quantity": 3,
+      "url": "https://www.etsy.com/listing/1234567890/handmade",
+      "price": { "amount": 4550, "divisor": 100, "currency_code": "USD" }
+    },
+    {
+      "listing_id": 1234567891,
+      "title": "Sold out item",
+      "state": "active",
+      "quantity": 0,
+      "url": "https://www.etsy.com/listing/1234567891/sold",
+      "price": { "amount": 1200, "divisor": 100, "currency_code": "EUR" }
+    }
+  ]
+}

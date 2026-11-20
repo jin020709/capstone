@@ -1,0 +1,222 @@
+{
+ "_note": "eBay 운영 API 실제 응답 일부 (2026-11-14, q=iphone 17, Accept-Language en-US, contextualLocation KR). 판매자 정보 제거",
+ "total": 13688,
+ "limit": 20,
+ "offset": 0,
+ "itemSummaries": [
+  {
+   "itemId": "v1|840122943214|0",
+   "title": "New sealed unopened Verizon Apple iPhone 17e 256GB Black USB-C eSIM  A3575",
+   "price": {
+    "value": "734673.50",
+    "currency": "KRW",
+    "convertedFromValue": "550.00",
+    "convertedFromCurrency": "USD"
+   },
+   "shippingOptions": [
+    {
+     "shippingCostType": "CALCULATED",
+     "shippingCost": {
+      "value": "39939.52",
+      "currency": "KRW",
+      "convertedFromValue": "29.90",
+      "convertedFromCurrency": "USD"
+     },
+     "minEstimatedDeliveryDate": "2026-12-01T08:00:00.000Z",
+     "maxEstimatedDeliveryDate": "2026-12-14T08:00:00.000Z"
+    }
+   ],
+   "condition": "New",
+   "conditionId": "1000",
+   "itemWebUrl": "https://www.ebay.com/itm/840122943214?_skw=iphone+17&hash=itemc39b3ac6ee:g:OyMAAeSwHtxq9nS0",
+   "image": {
+    "imageUrl": "https://i.ebayimg.com/images/g/OyMAAeSwHtxq9nS0/s-l225.jpg"
+   },
+   "itemLocation": {
+    "country": "US"
+   },
+   "buyingOptions": [
+    "FIXED_PRICE"
+   ]
+  },
+  {
+   "itemId": "v1|198722769274|0",
+   "title": "Case for iPhone 17 Pro / 18 Pro Phone Cover Protective Silver Matte Case ",
+   "price": {
+    "value": "20526.04",
+    "currency": "KRW",
+    "convertedFromValue": "13.90",
+    "convertedFromCurrency": "EUR"
+   },
+   "shippingOptions": [
+    {
+     "shippingCostType": "FIXED",
+     "shippingCost": {
+      "value": "8860.16",
+      "currency": "KRW",
+      "convertedFromValue": "6.00",
+      "convertedFromCurrency": "EUR"
+     },
+     "minEstimatedDeliveryDate": "2026-11-18T08:00:00.000Z",
+     "maxEstimatedDeliveryDate": "2026-11-24T08:00:00.000Z"
+    }
+   ],
+   "condition": "Neu",
+   "conditionId": "1000",
+   "itemWebUrl": "https://www.ebay.com/itm/198722769274?_skw=iphone+17&hash=item2e44ccd17a:g:nZ8AAeSws-Jq04EP&amdata=enc%3AAQALAAAA8Of5zIIojhOf%2BkQK%2Bxzjn7nrAZFymGeisnq4w%2B8UXYUj69mKONNs9il0xz19PAlADzEj%2FoByx9B6g5VgiUmCNO6od1qNiV1BQA7JE9eJH5SfxcGzfuRz49rc4fvrAEp9zNHOPi%2FF3gwfStTeso5PdaMZhqklHCASDeKGB2JG2owuxa7FPkR5bChtkn8TV2XoB0P%2F%2BAP0QDmwMB4rwxIhFm1OV%2B5o%2Ft%2FaAVheHRu52SGe%2F7MLOxbFhEIs0aZN3fepFThAxp26EFyPiEB1YfF9LxqtAPSqO5zQ%2FuCu68V6pt2pOyE0jhhloimslP2iiIUnQQ%3D%3D",
+   "image": {
+    "imageUrl": "https://i.ebayimg.com/images/g/nZ8AAeSws-Jq04EP/s-l225.jpg"
+   },
+   "itemLocation": {
+    "country": "DE"
+   },
+   "buyingOptions": [
+    "FIXED_PRICE",
+    "BEST_OFFER"
+   ]
+  },
+  {
+   "itemId": "v1|198737604604|0",
+   "title": "Apple iPhone 17 256GB Mist Blue | DHL Express: With you tomorrow!",
+   "price": {
+    "value": "1268479.92",
+    "currency": "KRW",
+    "convertedFromValue": "859.00",
+    "convertedFromCurrency": "EUR"
+   },
+   "shippingOptions": [
+    {
+     "shippingCostType": "FIXED",
+     "shippingCost": {
+      "value": "29533.87",
+      "currency": "KRW",
+      "convertedFromValue": "20.00",
+      "convertedFromCurrency": "EUR"
+     },
+     "minEstimatedDeliveryDate": "2026-11-18T08:00:00.000Z",
+     "maxEstimatedDeliveryDate": "2026-11-25T08:00:00.000Z"
+    }
+   ],
+   "condition": "Neu: Sonstige (siehe Artikelbeschreibung)",
+   "conditionId": "1500",
+   "itemWebUrl": "https://www.ebay.com/itm/198737604604?_skw=iphone+17&hash=item2e45af2ffc:g:mvUAAeSwkbRq2pvm",
+   "image": {
+    "imageUrl": "https://i.ebayimg.com/images/g/mvUAAeSwkbRq2pvm/s-l225.jpg"
+   },
+   "itemLocation": {
+    "country": "DE"
+   },
+   "buyingOptions": [
+    "FIXED_PRICE"
+   ]
+  },
+  {
+   "itemId": "v1|820230165162|0",
+   "title": "Apple IPhone 17 Pro Max 1TB",
+   "price": {
+    "value": "1404446.40",
+    "currency": "KRW",
+    "convertedFromValue": "1499.00",
+    "convertedFromCurrency": "CAD"
+   },
+   "shippingOptions": [
+    {
+     "shippingCostType": "FIXED",
+     "shippingCost": {
+      "value": "2810.77",
+      "currency": "KRW",
+      "convertedFromValue": "3.00",
+      "convertedFromCurrency": "CAD"
+     },
+     "minEstimatedDeliveryDate": "2026-12-01T08:00:00.000Z",
+     "maxEstimatedDeliveryDate": "2026-12-17T08:00:00.000Z"
+    }
+   ],
+   "condition": "Open box",
+   "conditionId": "1500",
+   "itemWebUrl": "https://www.ebay.com/itm/820230165162?_skw=iphone+17&hash=itembef98712aa:g:88cAAeSwa3RqyS0I",
+   "image": {
+    "imageUrl": "https://i.ebayimg.com/images/g/88cAAeSwa3RqyS0I/s-l225.jpg"
+   },
+   "itemLocation": {
+    "country": "CA"
+   },
+   "buyingOptions": [
+    "FIXED_PRICE",
+    "BEST_OFFER"
+   ]
+  },
+  {
+   "itemId": "v1|880110725659|0",
+   "title": "Apple iPhone 17e - 256GB - Black - as-is for salvage/parts/disassembly sim lock",
+   "price": {
+    "value": "467519.50",
+    "currency": "KRW",
+    "convertedFromValue": "350.00",
+    "convertedFromCurrency": "USD"
+   },
+   "shippingOptions": [
+    {
+     "shippingCostType": "CALCULATED",
+     "shippingCost": {
+      "value": "159424.15",
+      "currency": "KRW",
+      "convertedFromValue": "119.35",
+      "convertedFromCurrency": "USD"
+     },
+     "minEstimatedDeliveryDate": "2026-12-07T08:00:00.000Z",
+     "maxEstimatedDeliveryDate": "2026-12-17T08:00:00.000Z"
+    }
+   ],
+   "condition": "New",
+   "conditionId": "1000",
+   "itemWebUrl": "https://www.ebay.com/itm/880110725659?_skw=iphone+17&hash=itemcceaafea1b:g:YDQAAeSwEv9q9LbU",
+   "image": {
+    "imageUrl": "https://i.ebayimg.com/images/g/YDQAAeSwEv9q9LbU/s-l225.jpg"
+   },
+   "itemLocation": {
+    "country": "US"
+   },
+   "buyingOptions": [
+    "FIXED_PRICE",
+    "BEST_OFFER"
+   ]
+  },
+  {
+   "itemId": "v1|298166217391|595217560783",
+   "title": "iPhone 17 16 Pro Max Privacy Screen (4 PACK) Protector Anti Spy Tempered Glass",
+   "price": {
+    "value": "17661.24",
+    "currency": "KRW",
+    "convertedFromValue": "9.99",
+    "convertedFromCurrency": "GBP"
+   },
+   "shippingOptions": [
+    {
+     "shippingCostType": "FIXED",
+     "shippingCost": {
+      "value": "21179.34",
+      "currency": "KRW",
+      "convertedFromValue": "11.98",
+      "convertedFromCurrency": "GBP"
+     },
+     "minEstimatedDeliveryDate": "2026-12-08T08:00:00.000Z",
+     "maxEstimatedDeliveryDate": "2026-12-11T08:00:00.000Z"
+    }
+   ],
+   "condition": "New",
+   "conditionId": "1000",
+   "itemWebUrl": "https://www.ebay.com/itm/298166217391?_skw=iphone+17&hash=item456c176aaf:g:2VMAAeSwYrZpxmz2&amdata=enc%3AAQALAAAA8Of5zIIojhOf%2BkQK%2Bxzjn7msB2g8%2F3d1fHWZDxxM03j50%2FPuB5sKx%2B01quSh4dXrbEExp1fvxIusUAM70S113m2ubDunv8A2y5%2F2ike4jItbBcFWgFKyxrLTAxtB%2F363KgNhdjQA%2B5WC%2Fzi4MxbQMhVutxxNOQO1Ty8xUjUPA7I0hoTbRLUIQp%2Fa%2F%2BRw1nmgzTlKFAKAWchA%2B7Tiabu1oMTboiv%2F98Q8plGS%2Bkzl6v2rtLB7tUVfLrsezP3lJ85MgapLITB2Desf6duLkLE0m3SXEvKqoOvIDnRzJdEW6Ep%2BavOW12CfXEIgMMwWmZcSRA%3D%3D",
+   "image": {
+    "imageUrl": "https://i.ebayimg.com/images/g/2VMAAeSwYrZpxmz2/s-l225.jpg"
+   },
+   "itemLocation": {
+    "country": "GB"
+   },
+   "itemGroupType": "SELLER_DEFINED_VARIATIONS",
+   "buyingOptions": [
+    "FIXED_PRICE"
+   ]
+  }
+ ]
+}

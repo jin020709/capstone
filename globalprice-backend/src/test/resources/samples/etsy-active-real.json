@@ -1,0 +1,74 @@
+{
+ "_note": "Etsy 실제 응답 일부 (2026-11-14, keywords=wireless headphones). shop_id · user_id 등 제거",
+ "count": 4,
+ "results": [
+  {
+   "listing_id": 4612487639,
+   "title": "Personalised Engraved Wireless Headphones, Foldable Bluetooth Headset with Bamboo Sides, Microphone & Audio Cable | Custom Name or Logo Gift",
+   "state": "active",
+   "quantity": 10,
+   "url": "https://www.etsy.com/listing/4612487639/personalised-engraved-wireless",
+   "price": {
+    "amount": 2700,
+    "divisor": 100,
+    "currency_code": "GBP"
+   },
+   "listing_type": "physical",
+   "is_supply": false,
+   "when_made": "made_to_order",
+   "who_made": "i_did",
+   "images": null
+  },
+  {
+   "listing_id": 4592732686,
+   "title": "RCA WHP150 wireless headphones with 900 MHz transmitter",
+   "state": "active",
+   "quantity": 1,
+   "url": "https://www.etsy.com/listing/4592732686/rca-whp150-wireless-headphones-with-900",
+   "price": {
+    "amount": 2800,
+    "divisor": 100,
+    "currency_code": "USD"
+   },
+   "listing_type": "physical",
+   "is_supply": false,
+   "when_made": "1990s",
+   "who_made": "someone_else",
+   "images": null
+  },
+  {
+   "listing_id": 1365120015,
+   "title": "1 Pair 12x40mm Rhodium Plated Wireless Headphone Earrings ,Stud Earrings, Wireless Headphone Charms,EAR-441",
+   "state": "active",
+   "quantity": 938,
+   "url": "https://www.etsy.com/listing/1365120015/1-pair-12x40mm-rhodium-plated-wireless",
+   "price": {
+    "amount": 250,
+    "divisor": 100,
+    "currency_code": "USD"
+   },
+   "listing_type": "physical",
+   "is_supply": true,
+   "when_made": "2007_2009",
+   "who_made": "i_did",
+   "images": null
+  },
+  {
+   "listing_id": 1141105441,
+   "title": "Wireless Earbuds Ear Pods SVG PNG DXF Layered by Color Cut File  Silhouette Clip Art Vector Graphic Icon Headphones Smartphone Music",
+   "state": "active",
+   "quantity": 23,
+   "url": "https://www.etsy.com/listing/1141105441/wireless-earbuds-ear-pods-svg-png-dxf",
+   "price": {
+    "amount": 88,
+    "divisor": 100,
+    "currency_code": "USD"
+   },
+   "listing_type": "download",
+   "is_supply": true,
+   "when_made": "2007_2009",
+   "who_made": "i_did",
+   "images": null
+  }
+ ]
+}

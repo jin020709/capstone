@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ko" data-theme="green">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GlobalPrice — 해외직구 가격비교</title>
+<meta name="description" content="상품 가격 · 쿠폰 · 배송비 · 관세 · 환율을 반영한 해외직구 예상 구매비용 비교">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Gothic+A1:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<!-- 구글 애드센스: 승인 후 아래 주석을 풀고 client 값 입력
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
+-->
+</head>
+<body data-page="home">
+<div id="site-header"></div>
+
+<main class="page container">
+
+  <section class="home-top">
+    <nav class="card cat-menu" aria-label="카테고리" id="catMenu"></nav>
+
+    <div class="hero">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <span class="badge" style="align-self:flex-start">11월 직구 시즌</span>
+        <h1>상품 가격 말고,<br>실제로 낼 돈으로 비교하세요</h1>
+        <p>여러 해외 쇼핑몰의 상품 가격에 쿠폰 · 배송비 · 관세 · 결제 수수료와 환율을 반영해 판매처별 예상 구매비용을 한 화면에서 보여드려요.</p>
+        <div class="formula" aria-label="예상 구매비용 계산 방식">
+          <span class="part">상품 가격</span><span>−</span><span class="part">쿠폰</span><span>+</span>
+          <span class="part">배송비</span><span>+</span><span class="part">관세 · 부가세</span><span>+</span>
+          <span class="part">결제 수수료</span><span>=</span><span class="total">예상 구매비용</span>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px">
+        <a class="btn btn-accent" id="heroSearch" href="search.html">행사 상품 최저가 보기</a>
+        <a class="btn btn-line" href="#calc">예상 구매비용 계산하기</a>
+      </div>
+      <span class="note mock-only">행사 일정 · 혜택은 예시이며 각 쇼핑몰 공지 기준으로 갱신됩니다.</span>
+      <span class="note live-only">가격은 쇼핑몰 API 로 실시간 조회하고, 환율은 한국수출입은행 고시 기준으로 계산해요.</span>
+    </div>
+
+    <aside class="home-side">
+      <div class="card" id="loginBox"></div>
+      <div class="card">
+        <h2 style="margin:0 0 10px;font-size:15px"><span class="mock-only">실시간 </span>인기 검색어</h2>
+        <ol class="hot-list" id="hotList"></ol>
+      </div>
+    </aside>
+  </section>
+
+  <!-- 광고 영역: 구글 애드센스 + 자체 맞춤형 광고 -->
+  <div class="ad-slot" data-ad-slot="home-top">구글 애드센스 / 자체 맞춤형 광고 영역 (728×90)</div>
+
+  <section id="events">
+    <div class="section-head">
+      <div>
+        <h2>이번 달 직구 행사 · 쿠폰</h2>
+        <p class="muted" style="margin:4px 0 0;font-size:14px">행사 쿠폰은 상품별 예상 구매비용에 자동으로 반영돼요.</p>
+      </div>
+      <span class="small muted mock-only">일정 · 혜택: 예시 데이터</span>
+    </div>
+    <div class="grid-cards" id="eventList"></div>
+  </section>
+
+  <section id="popularSection">
+    <div class="section-head">
+      <h2>쿠폰 적용 최저가 인기 상품</h2>
+      <span class="small muted">쿠폰 · 배송비 · 관부가세 · 수수료 포함 예상 구매비용</span>
+    </div>
+    <div class="grid-cards" id="popularList"><div class="state" role="status">불러오는 중…</div></div>
+  </section>
+
+  <section id="calc" class="card">
+    <div class="section-head">
+      <div>
+        <h2>예상 구매비용 계산기</h2>
+        <p class="muted" style="margin:4px 0 0;font-size:14px">상품 가격과 배송비를 넣으면 관세 · 부가세 · 결제 수수료까지 원화로 계산해요.</p>
+      </div>
+      <span class="small muted">세율 · 면세 기준은 관세청 안내 기준, 수수료율은 가정값</span>
+    </div>
+    <div class="calc">
+      <form class="form-grid" id="calcForm" novalidate>
+        <div class="field"><label for="cPrice">상품 가격</label><input id="cPrice" name="price" type="number" min="0" step="0.01" value="250" inputmode="decimal"></div>
+        <div class="field"><label for="cCur">통화</label>
+          <select id="cCur" name="currency"><option value="USD">USD 미국 달러</option><option value="JPY">JPY 일본 엔</option><option value="EUR">EUR 유로</option><option value="GBP">GBP 영국 파운드</option><option value="CNY">CNY 중국 위안</option></select></div>
+        <div class="field"><label for="cShip">배송비 (같은 통화)</label><input id="cShip" name="shipping" type="number" min="0" step="0.01" value="20" inputmode="decimal"></div>
+        <div class="field"><label for="cCoupon">쿠폰 할인 (같은 통화)</label><input id="cCoupon" name="coupon" type="number" min="0" step="0.01" value="0" inputmode="decimal"></div>
+        <div class="field" style="grid-column:1 / -1"><label for="cCat">품목</label>
+          <select id="cCat" name="category">
+            <option value="shoes">의류 · 신발 (관세 13%)</option>
+            <option value="smartphone">스마트폰 · 노트북 (관세 0%)</option>
+            <option value="electronics">기타 전자기기 (관세 8%)</option>
+            <option value="general">일반 잡화 (관세 8%)</option>
+            <option value="books">도서 (관세 0%)</option>
+          </select></div>
+      </form>
+      <div class="calc-result" aria-live="polite" id="calcResult"></div>
+    </div>
+  </section>
+
+  <div class="ad-slot" data-ad-slot="home-bottom">자체 맞춤형 광고 영역</div>
+</main>
+
+<div id="site-footer"></div>
+
+<script src="js/config.js"></script>
+<script src="js/mock-data.js"></script>
+<script src="js/price.js"></script>
+<script src="js/api.js"></script>
+<script src="js/common.js"></script>
+<script src="js/home.js"></script>
+</body>
+</html>

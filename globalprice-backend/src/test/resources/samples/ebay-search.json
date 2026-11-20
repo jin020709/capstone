@@ -1,0 +1,39 @@
+{
+  "_note": "손으로 만든 샘플 (공개 문서 형식 기준). eBay 샌드박스 키가 생기면 실제 응답으로 바꿀 것",
+  "href": "https://api.sandbox.ebay.com/buy/browse/v1/item_summary/search?q=iphone&limit=3",
+  "total": 3,
+  "limit": 3,
+  "offset": 0,
+  "itemSummaries": [
+    {
+      "itemId": "v1|110551234567|0",
+      "title": "Apple iPhone 17 256GB Black Unlocked",
+      "price": { "value": "799.00", "currency": "USD" },
+      "shippingOptions": [
+        { "shippingCostType": "FIXED", "shippingCost": { "value": "35.00", "currency": "USD" } },
+        { "shippingCostType": "FIXED", "shippingCost": { "value": "25.00", "currency": "USD" } }
+      ],
+      "condition": "New",
+      "conditionId": "1000",
+      "itemWebUrl": "https://www.ebay.com/itm/110551234567",
+      "itemAffiliateWebUrl": "https://www.ebay.com/itm/110551234567?mkevt=1&campid=TEST",
+      "image": { "imageUrl": "https://i.ebayimg.com/images/g/test/s-l225.jpg" },
+      "itemLocation": { "country": "US", "postalCode": "950**" }
+    },
+    {
+      "itemId": "v1|110559999999|0",
+      "title": "Apple iPhone 17 256GB - Refurbished",
+      "price": { "value": "650.00", "currency": "USD" },
+      "condition": "Seller refurbished",
+      "conditionId": "2500",
+      "itemWebUrl": "https://www.ebay.com/itm/110559999999",
+      "itemLocation": { "country": "US" }
+    },
+    {
+      "itemId": "v1|110550000000|0",
+      "title": "가격 없는 상품 (형식 오류 → 건너뜀)",
+      "condition": "New",
+      "conditionId": "1000"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko" data-theme="green">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>로그인 — GlobalPrice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Gothic+A1:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="login">
+<div id="site-header"></div>
+
+<main class="page container">
+  <section class="card auth-wrap">
+    <h1>로그인</h1>
+    <p class="muted" style="margin:0 0 16px;font-size:14px">관심 상품과 가격 하락 알림을 이용하려면 로그인해 주세요.</p>
+    <form id="loginForm" novalidate>
+      <div class="field">
+        <label for="email">이메일</label>
+        <input id="email" name="email" type="email" autocomplete="email" required>
+        <span class="error-text" id="emailErr"></span>
+      </div>
+      <div class="field">
+        <label for="password">비밀번호</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required minlength="8">
+        <span class="error-text" id="passwordErr"></span>
+      </div>
+      <p class="error-text" id="formErr" role="alert" style="margin:0"></p>
+      <button type="submit" class="btn btn-primary">로그인</button>
+      <p class="small" style="text-align:center;margin:0">아직 회원이 아니신가요? <a href="signup.html">회원가입</a></p>
+    </form>
+  </section>
+</main>
+
+<div id="site-footer"></div>
+
+<script src="js/config.js"></script>
+<script src="js/mock-data.js"></script>
+<script src="js/price.js"></script>
+<script src="js/api.js"></script>
+<script src="js/common.js"></script>
+<script src="js/auth.js"></script>
+</body>
+</html>

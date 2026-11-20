@@ -1,0 +1,51 @@
+# 한글 검색어 → 영어 (쇼핑몰 API 는 영어 검색어를 기준으로 동작). 형식: 한글,영어
+아이폰,iphone
+갤럭시,galaxy
+맥북,macbook
+아이패드,ipad
+에어팟,airpods
+애플워치,apple watch
+삼성,samsung
+애플,apple
+소니,sony
+노트북,laptop
+태블릿,tablet
+스마트폰,smartphone
+헤드폰,headphones
+이어폰,earbuds
+무선,wireless
+러닝화,running shoes
+운동화,sneakers
+키보드,keyboard
+마우스,mouse
+모니터,monitor
+카메라,camera
+닌텐도,nintendo
+스위치,switch
+플레이스테이션,playstation
+다이슨,dyson
+나이키,nike
+아디다스,adidas
+프로,pro
+맥스,max
+울트라,ultra
+# 11/18 추가 (정확도 측정: "맥북 에어" 가 "macbook 에어" 로 검색돼 화면 부품만 나옴)
+에어,air
+미니,mini
+플러스,plus
+폴드,fold
+플립,flip
+워치,watch
+버즈,buds
+픽셀,pixel
+구글,google
+라이트,lite
+엣지,edge
+슬림,slim
+로지텍,logitech
+앤커,anker
+기계식,mechanical
+보조배터리,power bank
+아이맥,imac
+맥미니,mac mini
+엑스박스,xbox

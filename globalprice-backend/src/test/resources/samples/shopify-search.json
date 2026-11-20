@@ -1,0 +1,505 @@
+{
+ "jsonrpc": "2.0",
+ "id": 1,
+ "result": {
+  "structuredContent": {
+   "ucp": {
+    "version": "2026-04-08",
+    "capabilities": {
+     "dev.ucp.shopping.catalog.search": [
+      {
+       "version": "2026-04-08",
+       "spec": "https://ucp.dev/2026-04-08/specification/catalog",
+       "schema": "https://ucp.dev/2026-04-08/schemas/shopping/catalog_search.json"
+      }
+     ],
+     "dev.ucp.shopping.catalog.lookup": [
+      {
+       "version": "2026-04-08",
+       "spec": "https://ucp.dev/2026-04-08/specification/catalog",
+       "schema": "https://ucp.dev/2026-04-08/schemas/shopping/catalog_lookup.json"
+      }
+     ],
+     "dev.shopify.catalog.global": [
+      {
+       "version": "2026-04-08",
+       "spec": "https://shopify.dev/docs/agents/catalog/global-catalog",
+       "schema": "https://shopify.dev/ucp/schemas/2026-04-08/shopify_catalog_global.json",
+       "extends": [
+        "dev.ucp.shopping.catalog.search",
+        "dev.ucp.shopping.catalog.lookup"
+       ],
+       "requires": {
+        "protocol": {
+         "min": "2026-04-08"
+        }
+       }
+      }
+     ]
+    },
+    "status": "success"
+   },
+   "products": [
+    {
+     "id": "gid://shopify/p/632V3E2Ev3fD1t9U4h86Bm",
+     "title": "Studio 2 Wireless On-Ear Headphones Coral",
+     "description": {
+      "html": "(trimmed)"
+     },
+     "handle": "studio-2-wireless-on-ear-headphones-coral",
+     "media": [
+      {
+       "type": "image",
+       "url": "https://cdn.shopify.com/s/files/1/0240/9337/files/1_Studio_2_Wireless_Coral.jpg",
+       "alt_text": "Studio 2 Wireless On-Ear Headphones Coral",
+       "preview": {
+        "url": "https://cdn.shopify.com/s/files/1/0240/9337/files/1_Studio_2_Wireless_Coral.jpg",
+        "width": 3000,
+        "height": 3000
+       },
+       "width": 3000,
+       "height": 3000
+      }
+     ],
+     "options": [
+      {
+       "name": "Color",
+       "values": [
+        {
+         "label": "Black"
+        },
+        {
+         "label": "Coral"
+        },
+        {
+         "label": "Deep Blue"
+        },
+        {
+         "label": "Mint"
+        }
+       ]
+      }
+     ],
+     "metadata": {
+      "unique_selling_points": [
+       "Bluetooth 5.4 multipoint and wireless share mode enable two devices or two users to connect simultaneously."
+      ],
+      "top_features": [
+       "Bluetooth 5.4 multipoint connectivity: Keeps headphones connected to two devices for seamless switching",
+       "Wireless share mode: Allows a second pair of headphones to join the same audio source for group listening",
+       "Dual noise-canceling microphones: Captures voice while reducing background noise for clear calls",
+       "Customizable EQ3 sound: Tunable sound profile via app for personalized audio experience",
+       "Quick charge and long battery life: 2-hour charge time, up to 45 hours playtime, and 190-hour standby"
+      ],
+      "tech_specs": [
+       "Driver: 40 mm dynamic",
+       "Frequency Response: 20 Hz – 20 kHz",
+       "Impedance: 16 ohms",
+       "Microphone: 1 x ECM noise-canceling",
+       "Connectivity: Bluetooth 5.4 (SBC, AAC), HSP, HFP, A2DP, AVRCP",
+       "Battery: 380 mAh Li-ion, 3.8 V, 2 hours charge time, 45 hours playtime, 24 hours talk time, 190 hours standby",
+       "Dimensions: 7.32 in (H) x 6.02 in (L) x 2.83 in (W)",
+       "Weight: 138 g",
+       "Ear Cushion Material: PU"
+      ]
+     },
+     "variants": [
+      {
+       "id": "gid://shopify/ProductVariant/40811370184776",
+       "title": "Studio 2 Wireless On-Ear Headphones Coral",
+       "description": {
+        "plain": "(trimmed)"
+       },
+       "handle": "studio-2-wireless-on-ear-headphones-coral",
+       "url": "https://www.jlab.com/products/studio-2-wireless-on-ear-headphones-coral?variant=40811370184776&_gsid=uditYMuoRG3W&utm_source=shopify&utm_medium=catalog",
+       "price": {
+        "amount": 3199,
+        "currency": "USD"
+       },
+       "availability": {
+        "available": true
+       },
+       "options": [
+        {
+         "name": "Color",
+         "label": "Coral"
+        }
+       ],
+       "media": [
+        {
+         "type": "image",
+         "url": "https://cdn.shopify.com/s/files/1/0240/9337/files/1_Studio_2_Wireless_Coral.jpg",
+         "alt_text": "Studio 2 Wireless On-Ear Headphones Coral",
+         "preview": {
+          "url": "https://cdn.shopify.com/s/files/1/0240/9337/files/1_Studio_2_Wireless_Coral.jpg",
+          "width": 3000,
+          "height": 3000
+         },
+         "width": 3000,
+         "height": 3000
+        }
+       ],
+       "seller": {
+        "id": "gid://shopify/Shop/2409337",
+        "name": "JLab",
+        "url": "https://www.jlab.com",
+        "domain": "jlabgrabbag.myshopify.com",
+        "links": [
+         {
+          "type": "privacy_policy",
+          "url": "https://checkout.shopify.com/2409337/policies/1594941.html"
+         },
+         {
+          "type": "terms_of_service",
+          "url": "https://checkout.shopify.com/2409337/policies/1594945.html"
+         },
+         {
+          "type": "refund_policy",
+          "url": "https://checkout.shopify.com/2409337/policies/1594937.html"
+         },
+         {
+          "type": "shipping_policy",
+          "url": "https://checkout.shopify.com/2409337/policies/23307157576.html"
+         }
+        ]
+       },
+       "checkout_url": "https://www.jlab.com/cart/40811370184776:1?_gsid=uditYMuoRG3W&utm_source=shopify&utm_medium=catalog",
+       "rating": {
+        "value": 4.7,
+        "scale_min": 1,
+        "scale_max": 5,
+        "count": 3
+       },
+       "condition": [
+        "new"
+       ],
+       "eligible": {
+        "native_checkout": false
+       }
+      }
+     ],
+     "price_range": {
+      "min": {
+       "amount": 3199,
+       "currency": "USD"
+      },
+      "max": {
+       "amount": 3199,
+       "currency": "USD"
+      }
+     }
+    },
+    {
+     "id": "gid://shopify/p/4nqyvEX8LKh9HdsS21mhEF",
+     "title": "JBL Tune 520BT Wireless on-ear Headphones - Black",
+     "description": {
+      "html": "(trimmed)"
+     },
+     "handle": "jbl-tune-520bt-wireless-on-ear-headphones-black",
+     "rating": {
+      "value": 4.9,
+      "scale_min": 1,
+      "scale_max": 5,
+      "count": 360
+     },
+     "media": [
+      {
+       "type": "image",
+       "url": "https://cdn.shopify.com/s/files/1/0575/3628/2777/files/61hOoghkbRL._AC_SL1500__1.jpg",
+       "alt_text": "JBL Tune 520BT Wireless on-ear Headphones - Black",
+       "preview": {
+        "url": "https://cdn.shopify.com/s/files/1/0575/3628/2777/files/61hOoghkbRL._AC_SL1500__1.jpg",
+        "width": 1102,
+        "height": 1398
+       },
+       "width": 1102,
+       "height": 1398
+      }
+     ],
+     "options": [
+      {
+       "name": "Color",
+       "values": [
+        {
+         "label": "Black"
+        },
+        {
+         "label": "Blue"
+        },
+        {
+         "label": "Navy Blue"
+        },
+        {
+         "label": "Purple"
+        },
+        {
+         "label": "Red"
+        },
+        {
+         "label": "Sapphire Blue"
+        },
+        {
+         "label": "Spring Lilac"
+        },
+        {
+         "label": "White"
+        }
+       ]
+      }
+     ],
+     "metadata": {
+      "unique_selling_points": [
+       "Combines JBL Pure Bass sound with app-controlled EQ and voice-activated call management in a lightweight, foldable design."
+      ],
+      "top_features": [
+       "JBL Pure Bass sound technology delivers powerful, deep bass for an immersive audio experience",
+       "Bluetooth 5.3 wireless connectivity ensures stable, high-quality streaming and easy device switching",
+       "Customizable sound profile via the JBL headphones app for tailored listening preferences",
+       "Voice Aware feature enables hands-free calls and voice assistant access from the earcup",
+       "Lightweight, foldable design with soft ear cushions and padded headband for all-day comfort"
+      ],
+      "tech_specs": [
+       "Wireless Technology: Bluetooth 5.3",
+       "Battery Life: Up to 57 hours (rechargeable)",
+       "Recharge Time: 5 minutes (3 hours of playtime)",
+       "Charging Interface: USB Type-C",
+       "Microphone: Built-in, voice-activated call support",
+       "Headphone Style: Closed-back, on-ear"
+      ]
+     },
+     "variants": [
+      {
+       "id": "gid://shopify/ProductVariant/47887105589401",
+       "title": "JBL Tune 520BT Wireless on-ear Headphones - Black",
+       "description": {
+        "plain": "(trimmed)"
+       },
+       "handle": "jbl-tune-520bt-wireless-on-ear-headphones-black",
+       "url": "https://www.plug.tech/products/jbl-tune-520bt-wireless-on-ear-headphones-black?variant=47887105589401&_gsid=uditYMuoRG3W&utm_source=shopify&utm_medium=catalog",
+       "price": {
+        "amount": 64000,
+        "currency": "KRW"
+       },
+       "list_price": {
+        "amount": 85400,
+        "currency": "KRW"
+       },
+       "availability": {
+        "available": true
+       },
+       "options": [
+        {
+         "name": "Color",
+         "label": "Black"
+        }
+       ],
+       "media": [
+        {
+         "type": "image",
+         "url": "https://cdn.shopify.com/s/files/1/0575/3628/2777/files/61hOoghkbRL._AC_SL1500__1.jpg",
+         "alt_text": "JBL Tune 520BT Wireless on-ear Headphones - Black",
+         "preview": {
+          "url": "https://cdn.shopify.com/s/files/1/0575/3628/2777/files/61hOoghkbRL._AC_SL1500__1.jpg",
+          "width": 1102,
+          "height": 1398
+         },
+         "width": 1102,
+         "height": 1398
+        }
+       ],
+       "seller": {
+        "id": "gid://shopify/Shop/57536282777",
+        "name": "Plug",
+        "url": "https://www.plug.tech",
+        "domain": "plugtechh.myshopify.com",
+        "links": [
+         {
+          "type": "privacy_policy",
+          "url": "https://checkout.shopify.com/57536282777/policies/25066766489.html"
+         },
+         {
+          "type": "terms_of_service",
+          "url": "https://checkout.shopify.com/57536282777/policies/25066799257.html"
+         },
+         {
+          "type": "refund_policy",
+          "url": "https://checkout.shopify.com/57536282777/policies/25066733721.html"
+         }
+        ]
+       },
+       "checkout_url": "https://www.plug.tech/cart/47887105589401:1?_gsid=uditYMuoRG3W&utm_source=shopify&utm_medium=catalog",
+       "condition": [
+        "new"
+       ],
+       "eligible": {
+        "native_checkout": false
+       }
+      }
+     ],
+     "price_range": {
+      "min": {
+       "amount": 64000,
+       "currency": "KRW"
+      },
+      "max": {
+       "amount": 64000,
+       "currency": "KRW"
+      }
+     }
+    },
+    {
+     "id": "gid://shopify/p/2vL6aNbJwJpCmV7qOD0tZy",
+     "title": "MONSTER AC530 Wireless Bluetooth Earphones - Active Noise Cancelling | Bio-Fiber Dynamic Driver Foldable Headphones",
+     "description": {
+      "html": "(trimmed)"
+     },
+     "handle": "sales-monster-ac530-wireless-bluetooth-earphones-noise-canceling-wireless-bio-fiber-dynamic-driver-foldable-music-earphones-gift",
+     "media": [
+      {
+       "type": "image",
+       "url": "https://cdn.shopify.com/s/files/1/0706/3355/4227/files/pomelli_photoshoot_image_9_16_0413_2.png",
+       "alt_text": "MONSTER AC530 Wireless Bluetooth Earphones - Active Noise Cancelling | Bio-Fiber Dynamic Driver Foldable Headphones",
+       "preview": {
+        "url": "https://cdn.shopify.com/s/files/1/0706/3355/4227/files/pomelli_photoshoot_image_9_16_0413_2.png",
+        "width": 689,
+        "height": 689
+       },
+       "width": 689,
+       "height": 689
+      }
+     ],
+     "options": [
+      {
+       "name": "Color",
+       "values": [
+        {
+         "label": "Ac530 Blue Navy"
+        },
+        {
+         "label": "Ac530 White"
+        }
+       ]
+      }
+     ],
+     "metadata": {
+      "unique_selling_points": [
+       "Combines active noise cancellation with bio fiber dynamic drivers and a foldable design for superior sound and portability."
+      ],
+      "top_features": [
+       "Active noise cancellation blocks out ambient noise for pure audio immersion",
+       "Bio fiber dynamic drivers deliver audiophile-grade sound with rich bass and clear highs",
+       "Foldable design enables compact storage and easy portability",
+       "OWS ear clip ensures a secure, comfortable fit during all activities",
+       "Built-in control buttons and volume control for effortless operation"
+      ],
+      "tech_specs": [
+       "Driver Type: Bio fiber dynamic driver",
+       "Noise Cancellation: Active noise cancellation (ANC)",
+       "Connectivity: Wireless Bluetooth",
+       "Design: Foldable",
+       "Ear Clip: OWS ear clip",
+       "Materials: Metal, leather, premium ABS",
+       "Controls: Built-in control buttons, volume control",
+       "Certification: CE certified"
+      ]
+     },
+     "variants": [
+      {
+       "id": "gid://shopify/ProductVariant/53128500805939",
+       "title": "MONSTER AC530 Wireless Bluetooth Earphones - Active Noise Cancelling | Bio-Fiber Dynamic Driver Foldable Headphones",
+       "description": {
+        "plain": "(trimmed)"
+       },
+       "handle": "sales-monster-ac530-wireless-bluetooth-earphones-noise-canceling-wireless-bio-fiber-dynamic-driver-foldable-music-earphones-gift",
+       "url": "https://techshopi.com/products/sales-monster-ac530-wireless-bluetooth-earphones-noise-canceling-wireless-bio-fiber-dynamic-driver-foldable-music-earphones-gift?variant=53128500805939&_gsid=uditYMuoRG3W&utm_source=shopify&utm_medium=catalog",
+       "price": {
+        "amount": 89000,
+        "currency": "KRW"
+       },
+       "list_price": {
+        "amount": 137000,
+        "currency": "KRW"
+       },
+       "availability": {
+        "available": true
+       },
+       "options": [
+        {
+         "name": "Color",
+         "label": "Ac530 Blue Navy"
+        }
+       ],
+       "media": [
+        {
+         "type": "image",
+         "url": "https://cdn.shopify.com/s/files/1/0706/3355/4227/files/pomelli_photoshoot_image_9_16_0413_2.png",
+         "alt_text": "MONSTER AC530 Wireless Bluetooth Earphones - Active Noise Cancelling | Bio-Fiber Dynamic Driver Foldable Headphones",
+         "preview": {
+          "url": "https://cdn.shopify.com/s/files/1/0706/3355/4227/files/pomelli_photoshoot_image_9_16_0413_2.png",
+          "width": 689,
+          "height": 689
+         },
+         "width": 689,
+         "height": 689
+        }
+       ],
+       "seller": {
+        "id": "gid://shopify/Shop/70633554227",
+        "name": "TechShopi",
+        "url": "https://techshopi.com",
+        "domain": "techshopi-2.myshopify.com",
+        "links": [
+         {
+          "type": "privacy_policy",
+          "url": "https://checkout.shopify.com/70633554227/policies/29483073843.html"
+         },
+         {
+          "type": "terms_of_service",
+          "url": "https://checkout.shopify.com/70633554227/policies/29483106611.html"
+         },
+         {
+          "type": "refund_policy",
+          "url": "https://checkout.shopify.com/70633554227/policies/29483041075.html"
+         },
+         {
+          "type": "shipping_policy",
+          "url": "https://checkout.shopify.com/70633554227/policies/29483139379.html"
+         }
+        ]
+       },
+       "checkout_url": "https://techshopi.com/cart/53128500805939:1?_gsid=uditYMuoRG3W&utm_source=shopify&utm_medium=catalog",
+       "rating": {
+        "value": 4.2,
+        "scale_min": 1,
+        "scale_max": 5,
+        "count": 14
+       },
+       "condition": [
+        "new"
+       ],
+       "eligible": {
+        "native_checkout": false
+       }
+      }
+     ],
+     "price_range": {
+      "min": {
+       "amount": 89000,
+       "currency": "KRW"
+      },
+      "max": {
+       "amount": 89000,
+       "currency": "KRW"
+      }
+     }
+    }
+   ],
+   "messages": [],
+   "pagination": {
+    "has_next_page": true,
+    "total_count": 897,
+    "cursor": "eyJvZmZzZXQiOjMsInRvdGFsX2NvdW50Ijo4OTcsInJldHVybmVkIjozfQ"
+   }
+  }
+ }
+}

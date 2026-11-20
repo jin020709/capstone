@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko" data-theme="green">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>관심 상품 · 알림 — GlobalPrice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Gothic+A1:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="mypage">
+<div id="site-header"></div>
+
+<main class="page container">
+  <h1 class="page-title">관심 상품 · 가격 알림</h1>
+  <div id="needLogin" class="card hidden">
+    <p style="margin:0 0 12px">관심 상품과 알림은 로그인 후 이용할 수 있어요.</p>
+    <a class="btn btn-primary" href="login.html?next=mypage.html">로그인</a>
+  </div>
+  <section class="card" id="wish">
+    <div class="section-head"><h2 style="font-size:19px">관심 상품</h2></div>
+    <div id="wishList"></div>
+  </section>
+  <section class="card" id="notis">
+    <div class="section-head"><h2 style="font-size:19px">받은 알림 <span style="color:var(--primary)" id="notiCount"></span></h2>
+      <button type="button" class="btn btn-line btn-sm hidden" id="notiReadAll">모두 읽음</button></div>
+    <div id="notiList"></div>
+    <nav class="pager hidden" id="notiPager" aria-label="받은 알림 페이지"></nav>
+  </section>
+  <section class="card" id="alerts">
+    <div class="section-head"><h2 style="font-size:19px">설정한 가격 알림</h2><span class="small muted">조건에 맞으면 하루 한 번 알려드려요</span></div>
+    <div id="alertList"></div>
+  </section>
+</main>
+
+<div id="site-footer"></div>
+
+<script src="js/config.js"></script>
+<script src="js/mock-data.js"></script>
+<script src="js/price.js"></script>
+<script src="js/api.js"></script>
+<script src="js/common.js"></script>
+<script src="js/mypage.js"></script>
+</body>
+</html>

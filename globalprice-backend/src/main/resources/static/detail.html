@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ko" data-theme="green">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>상품 상세 — GlobalPrice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Gothic+A1:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="detail">
+<div id="site-header"></div>
+
+<main class="page container" style="gap:16px">
+  <nav class="breadcrumb" aria-label="현재 위치" id="breadcrumb"><a href="index.html">홈</a></nav>
+
+  <div id="detailRoot"><div class="state" role="status">상품 정보를 불러오는 중…</div></div>
+</main>
+
+<template id="detailTpl">
+  <div class="detail-layout">
+    <div class="detail-main">
+      <section class="card product-summary">
+        <div class="thumb">[상품 이미지]</div>
+        <div class="meta">
+          <div data-bind="badges" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+          <h1 data-bind="name"></h1>
+          <div class="muted" style="font-size:13px;line-height:1.7" data-bind="spec"></div>
+          <p class="product-desc" data-bind="desc"></p>
+          <div class="small muted" style="margin-top:4px" data-bind="bestLabel">최저 예상 구매비용</div>
+          <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+            <span class="big" data-bind="best"></span>
+            <span class="price-strike" data-bind="bestNormal"></span>
+            <span class="small" style="font-weight:700;color:var(--discount)" data-bind="bestStore"></span>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">
+            <a class="btn btn-primary" data-bind="buyLink" href="#" target="_blank" rel="noopener">최저가 구매하러 가기</a>
+            <button type="button" class="btn btn-line" id="wishBtn" aria-pressed="false">관심 상품</button>
+          </div>
+        </div>
+      </section>
+
+
+      <section class="card">
+        <div class="section-head">
+          <h2 style="font-size:19px">쇼핑몰별 최저가 <span style="color:var(--primary)" data-bind="count"></span></h2>
+          <button type="button" class="toggle" id="couponToggle" role="switch" aria-checked="true">쿠폰 · 행사 적용가<span class="track" aria-hidden="true"></span></button>
+        </div>
+        <div class="chip-row hidden" id="colorChips" role="group" aria-label="색상으로 판매처 거르기"></div>
+        <div class="table-wrap">
+          <table class="offer-table">
+            <caption class="sr-only">판매처별 예상 구매비용, 배송비, 혜택 (세부를 누르면 판매가 · 관부가세 · 수수료)</caption>
+            <thead><tr><th scope="col">판매처</th><th scope="col">예상 구매비용</th><th scope="col">배송비</th><th scope="col">혜택</th><th scope="col"><span class="sr-only">세부 · 이동</span></th></tr></thead>
+            <tbody id="offerRows"></tbody>
+          </table>
+        </div>
+        <p class="status-note hidden" id="offerStatusNote" role="status"></p>
+        <p class="notice" style="margin:12px 0 0">* <span class="mock-only">예시 데이터. </span>관부가세는 면세 기준(물품가격 기준 미국 $200, 그 외 $150)과 품목별 기본 세율로 계산한 추정치예요. 세액 합계가 1만원 미만이면 걷지 않아요. 국내 직구관(원화 결제)은 해외결제 수수료가 없어요. 판매처 순위는 광고와 무관해요.</p>
+      </section>
+
+      <section class="card hidden" id="configBox">
+        <div class="section-head" style="margin-bottom:10px">
+          <h2 style="font-size:19px">다른 구성</h2>
+          <span class="small muted">같은 모델의 다른 용량 · 구성 (최저 예상 구매비용)</span>
+        </div>
+        <div class="config-grid" id="configGrid"></div>
+      </section>
+
+      <div class="ad-slot" data-ad-slot="detail-inline">구글 애드센스 / 자체 맞춤형 광고 영역</div>
+    </div>
+
+    <aside class="detail-side" aria-label="가격 정보">
+      <section class="card">
+        <div class="section-head" style="margin-bottom:8px">
+          <h2 style="font-size:17px">가격 변동</h2>
+          <div class="period-tabs" role="group" aria-label="기간">
+            <button type="button" data-period="1m" aria-pressed="false">1개월</button>
+            <button type="button" data-period="3m" aria-pressed="false">3개월</button>
+            <button type="button" data-period="6m" aria-pressed="true">6개월</button>
+            <button type="button" data-period="1y" aria-pressed="false">1년</button>
+          </div>
+        </div>
+        <div class="chart-box"><canvas id="priceChart" role="img" aria-label="기간별 최저 예상 구매비용 그래프"></canvas></div>
+        <div class="stat-grid" style="margin-top:12px" id="historyStats"></div>
+        <p class="small muted" style="margin:8px 0 0" id="historyNote"></p>
+      </section>
+
+      <section class="alert-box" id="alertBox">
+        <h2 style="margin:0;font-size:16px">목표 가격 알림</h2>
+        <form id="alertForm" class="row" novalidate>
+          <label for="targetPrice" class="sr-only">목표 가격 (원)</label>
+          <input id="targetPrice" name="target" type="number" min="1000" step="100" placeholder="목표 가격 (원)" inputmode="numeric">
+          <button type="submit" class="btn btn-accent btn-sm">알림 받기</button>
+        </form>
+        <button type="button" class="btn btn-line btn-sm alert-sub" id="lowestAlertBtn">최근 30일 최저가보다 내려가면 알림</button>
+        <div class="msg" id="alertMsg" aria-live="polite"></div>
+      </section>
+
+      <section class="card">
+        <h2 style="margin:0 0 10px;font-size:16px">이 상품에 적용 가능한 행사</h2>
+        <div id="eventRows"></div>
+      </section>
+
+      <p class="small muted" id="rateBasis"></p>
+    </aside>
+  </div>
+</template>
+
+<div id="site-footer"></div>
+
+<script src="js/vendor/chart.umd.js"></script><!-- Chart.js 4.4.1 (MIT) -->
+<script src="js/config.js"></script>
+<script src="js/mock-data.js"></script>
+<script src="js/price.js"></script>
+<script src="js/api.js"></script>
+<script src="js/common.js"></script>
+<script src="js/detail.js"></script>
+</body>
+</html>

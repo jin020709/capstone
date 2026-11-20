@@ -1,0 +1,57 @@
+// =====================================================
+// GlobalPrice 백엔드 빌드 설정
+//  - 실행: gradlew bootRun (Windows: gradlew.bat bootRun)
+//  - 테스트: gradlew test  (Testcontainers 통합 테스트는 Docker 가 켜져 있을 때만 실행)
+// =====================================================
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.1.1'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.teamsoda'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // 웹 · 검증
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    // 외부 API 호출 (RestClient)
+    implementation 'org.springframework.boot:spring-boot-starter-restclient'
+    // DB
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+    // 캐시 (소스별 검색 결과 10분)
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
+    implementation 'com.github.ben-manes.caffeine:caffeine'
+    // 비밀번호 BCrypt (Spring Security 전체는 쓰지 않음)
+    implementation 'org.springframework.security:spring-security-crypto'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testImplementation 'org.testcontainers:testcontainers-mysql'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    systemProperty 'user.timezone', 'Asia/Seoul'
+    // GP_TEST_DB_URL 이 있으면 Docker 없이 그 DB 로 통합 테스트 (IntegrationTestBase 참고)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs << '-parameters'
+}

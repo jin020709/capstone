@@ -1,0 +1,92 @@
+# =====================================================
+# GlobalPrice 설정 파일
+#  - 비밀값(DB 비밀번호, API 키)은 여기에 직접 쓰지 말고 환경변수로 받습니다.
+#    ${이름:기본값} → 환경변수 '이름'이 있으면 그 값, 없으면 기본값
+#  - enabled: false 인 소스는 키가 없어도 앱이 켜집니다.
+# =====================================================
+
+spring:
+  application:
+    name: globalprice
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/globalprice?serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: none          # 테이블은 DB 담당 02_create_tables.sql 로 만듦. create/update 금지
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: Asia/Seoul
+  jackson:
+    time-zone: Asia/Seoul
+
+server:
+  port: 8080
+  servlet:
+    session:
+      timeout: 30m
+      cookie:
+        http-only: true
+        same-site: lax
+
+globalprice:
+  zone: Asia/Seoul
+  search:
+    per-source-limit: 20
+    cache-ttl: 10m
+    cache-max-size: 500
+    connect-timeout: 2s
+    read-timeout: 3s
+    detail-refresh-timeout: 3s
+    rate-limit-cooldown: 10m
+    stale-after: 6h
+  pricing:
+    fee-rule-name: 해외 결제 수수료   # 활성 fee_rules 가 여러 건이면 이 이름을 우선 사용
+  home:
+    hot-keywords: [아이폰, 갤럭시, 맥북, 에어팟, 무선 헤드폰]
+  filter:
+    # 새 상품이 아닌 것 (제목 · condition 에 포함되면 제외)
+    not-new-keywords: [used, pre-owned, refurbished, renewed, "for parts", "parts only", "for repair", salvage, "as-is", "as is", "open box", 중고, 리퍼]
+    # 액세서리 · 부품 (제목에 포함되면 제외)
+    # (11/18 AliExpress · Etsy 결과 보고 추가: 거치대 · 파우치 · 수리 키트 · 청소 · 키캡 · 3D 프린트 소품 등)
+    accessory-keywords: [case, cover, protector, "screen protector", charger, cable, "tempered glass", skin, sticker, strap, holder, magsafe, "replacement part", replacement, digitizer, lcd, "back glass", "camera lens",
+      slimcase, sleeve, pouch, bag, shell, stand, mount, "charging stand", "charging base", hanger, hook, clip, lanyard, keychain, charm, decal, wrap, attachment, organizer, "3d printed", gridfinity,
+      "repair kit", repair, hinge, cleaner, "cleaning kit", brush, "ear tips", "ear pads", earpads, "ear cushion", cushion, keycap, puller, "switch puller", "wrist rest",
+      s-pen, "s pen", stylus, fidget, clicker, ornament, "custom dock",
+      assembly, "screen assembly", "inner screen", "inner oled", stencil, reballing, "essential kit", "ultra kit", "protection kit", "watch band", "band for", "ultra band", "titanium band", "sport band", "alpine loop", "trail loop", "ocean band", filter, "juice pack", "battery case",
+      kompatibel, compatibile, zubehör, halterung, feststeller, "trigger lock", hülle, handyhülle, handytasche, tasche, coque, étui, funda, schutzfolie,
+      케이스, 필름, 충전기, 케이블, 보호, 거치대, 파우치, 스킨, 키캡]
+  sources:
+    ebay:
+      enabled: ${EBAY_ENABLED:true}
+      client-id: ${EBAY_CLIENT_ID:}
+      client-secret: ${EBAY_CLIENT_SECRET:}
+      sandbox: ${EBAY_SANDBOX:true}
+      daily-budget: 3000
+    shopify:
+      enabled: ${SHOPIFY_ENABLED:true}
+      # 예시 프로필(테스트 fixture). 운영에서는 팀이 직접 호스팅한 프로필 URL 로 바꿔야 함
+      agent-profile: ${SHOPIFY_AGENT_PROFILE:https://shopify.dev/ucp/agent-profiles/2026-04-08/valid-with-capabilities.json}
+      daily-budget: 3000
+    aliexpress:
+      enabled: ${ALI_ENABLED:true}
+      app-key: ${ALI_APP_KEY:}
+      app-secret: ${ALI_APP_SECRET:}
+      tracking-id: ${ALI_TRACKING_ID:}
+      daily-budget: 3000
+    etsy:
+      enabled: ${ETSY_ENABLED:true}
+      api-key: ${ETSY_API_KEY:}       # "keystring:shared_secret" 형식
+      daily-budget: 3000
+    koreaexim:
+      auth-key: ${KOREAEXIM_KEY:}
+
+logging:
+  level:
+    com.teamsoda.globalprice: INFO

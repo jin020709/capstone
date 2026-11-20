@@ -1,0 +1,13 @@
+# 줄바꿈: 저장소는 LF, 체크아웃 시 OS 에 맞춤 (Windows · Mac 팀원이 섞여 있어도 diff 가 깨지지 않게)
+* text=auto
+
+# 셸 스크립트는 항상 LF, Windows 배치는 CRLF
+*.sh        text eol=lf
+gradlew     text eol=lf
+*.bat       text eol=crlf
+
+# 바이너리
+*.jar       binary
+*.jpg       binary
+*.png       binary
+*.docx      binary
