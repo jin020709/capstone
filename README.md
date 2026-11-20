@@ -17,7 +17,7 @@
 
 <div align="center">
 
-| **조경진** | **김명준** | **(팀원 이름)** | **(팀원 이름)** |
+| **조경진** | **김명준** | **서승재** | **이석호** |
 |  :------: |  :------: |  :------: |  :------: |
 | [<img src="https://github.com/jin020709.png" height=150 width=150> <br/> @jin020709](https://github.com/jin020709) | [<img src="https://avatars.githubusercontent.com/u/64572923?v=4" height=150 width=150> <br/> @mjun7227](https://github.com/mjun7227) | [<img src="https://avatars.githubusercontent.com/u/304592174?v=4" height=150 width=150> <br/> @ratio-per-intellectum](https://github.com/ratio-per-intellectum) | [<img src="https://avatars.githubusercontent.com/u/166719072?v=4" height=150 width=150> <br/> @dtg024](https://github.com/dtg024) |
 | 백엔드<br>가격 계산<br>회원 · 관심 상품 · 알림<br>발표 자료 | 쇼핑몰 API 연동<br>프론트엔드 | (담당 업무) | (담당 업무) |
