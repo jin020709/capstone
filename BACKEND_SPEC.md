@@ -1,37 +1,45 @@
-# GlobalPrice 백엔드 명세서 (Claude Code 전달용)
+# GlobalPrice 명세서
 
-- 버전: v1.0 (2026-11-13) · 이전 초안(v0.x)은 폐기하고 새로 작성
-- 스택: Java 25, Spring Boot 4.1.1, Gradle 9.2, MySQL 8.0.x
-- 입력 자료: `01_create_database.sql`, `02_create_tables.sql` (DB의 기준. 임의로 고치지 말 것)
-- 표기: **[확인]** = 구현 전에 공식 문서를 직접 열어 확인할 것. **[결정]** = 이 문서가 정한 값(팀이 바꾸면 따름)
+TEAM SODA · 해외직구 가격비교 서비스
 
----
-
-## 0. 작업 방식 (Claude Code에게)
-
-1. 이 문서를 처음부터 끝까지 읽고, 12장의 단계 순서대로 구현한다. 한 단계가 끝날 때마다 빌드와 테스트가 통과해야 다음으로 간다.
-2. **외부 API 어댑터는 코드를 쓰기 전에 공식 문서(WebFetch)로 요청 · 응답 형식을 확인**한다. 이 문서의 외부 API 설명은 공개 자료와 팀원의 실제 호출 결과를 정리한 것이라 틀릴 수 있다. 다르면 공식 문서를 따르고 차이를 보고한다.
-3. DB 스크립트(`01`, `02`)는 수정하지 않는다. 변경이 필요하면 `03_migration_*.sql`을 새로 만든다 (11장).
-4. 프론트엔드는 별도 저장소의 `API_SPEC.md`가 필드 단위 기준이다. 이 문서의 응답 필드와 다르면 **프론트 `API_SPEC.md`에 맞추고** 차이를 보고한다.
-5. API 키 · 시크릿은 환경변수로만 받고 저장소에 넣지 않는다. 로그에 Authorization 헤더 · 서명 · 키가 찍히지 않게 한다.
+- **이 문서 하나가 기준입니다.** 백엔드 동작 · 외부 API 연동 · 가격 계산 · 프론트와 주고받는 API 필드를 모두 여기에 적습니다.
+  - 예전 판(v1.0 `BACKEND_SPEC.md`, v1.1 `BACKEND_SPEC_v1.1.docx`, 프론트 `API_SPEC.md`)은 이 문서로 합쳤고 파일은 지웠습니다. 옛 내용은 git 기록에서 볼 수 있습니다.
+  - 코드를 바꿔서 동작이 달라지면 **이 문서를 같은 커밋에서 고치고**, 맨 아래 변경 이력에 한 줄 남깁니다.
+- 마지막 갱신: 2026-11-22 (같은 상품 묶기 · 검색 체크표 · 이상 가격 · AliExpress 출발국 반영)
+- 스택: Java 25 · Spring Boot 4.1.1 · Gradle 9.2 · MySQL 8.0.16 이상
+- 코드: `globalprice-backend` (패키지 `com.teamsoda.globalprice`), 화면: `GlobalPrice_frontend`, DB: `GlobalPrice_DB`
 
 ---
 
-## 1. 제품 개요와 1차 범위
+## 0. 한눈에 보기
 
-**서비스**: 다나와와 비슷한 가격 비교 사이트인데, 대상이 해외 쇼핑몰이다. 사용자가 상품을 검색하면 해외 쇼핑몰 API를 **실시간으로** 조회해서, 배송비 · 할인 · 환율 · 관세 · 수수료까지 반영한 **한국 도착 예상 구매비용(원)** 으로 정렬해 보여준다.
+| 소스 | 상태 | 비고 |
+| --- | --- | --- |
+| eBay (Browse API) | 켜짐 · 운영 키로 실제 호출 확인 | 샌드박스에는 한국 배송 상품이 없어 0건 → `EBAY_SANDBOX=false` |
+| Shopify (Global Catalog MCP) | 켜짐 · 실제 호출 확인 | 키 없음. 예시 에이전트 프로필은 운영용 아님 (13장) |
+| Etsy (Open API v3) | 켜짐 · 실제 호출 확인 | 키 필요. 수공예 · 빈티지 위주라 전자기기 비교에 약함 |
+| AliExpress (Affiliate) | 켜짐 · 실제 호출 확인 | 키 필요. tracking_id 없으면 제휴 링크 대신 상품 페이지 |
+| 한국수출입은행 환율 | 실제 호출 확인 | `KOREAEXIM_KEY` 필요. 서버 시작 시 최근 영업일 값 자동 수집 |
 
-**1차에서 하는 것**
-- 검색어 → 쇼핑몰 4곳(eBay, Shopify, AliExpress, Etsy) 동시 조회 → 예상 구매비용 계산 → 가격순 정렬
-- 상품 상세, 가격 변동 그래프, 환율 조회
-- 회원(세션 로그인), 관심 상품, 가격 알림(웹 안에서 확인)
+키가 없거나 `*_ENABLED=false`인 소스는 `skipped`로 표시되고, 앱 기동에는 영향이 없습니다.
 
-**1차에서 하지 않는 것**
-- **같은 상품 묶기** (쇼핑몰 간 동일 상품 매칭). 단, 2차에 붙일 수 있게 인터페이스만 둔다 (4-4).
-- Gemini · ELECTRA 등 AI 사용
-- 이메일 · 푸시 알림, 평점 · 인기순 정렬, 카테고리 필터(후순위, 6장)
+---
 
-**1차의 상품 개념**: 상품 1건 = 쇼핑몰 판매 상품 1건. DB에서는 `products` 1행과 `mall_products` 1행이 항상 1:1이다. 2차에 묶기가 들어오면 `products`를 합치는 방식으로 확장한다.
+## 1. 제품 개요와 범위
+
+다나와와 비슷한 해외직구 가격 비교 사이트. 사용자가 검색하면 해외 쇼핑몰 API를 **실시간으로** 조회해, 배송비 · 할인 · 환율 · 관세 · 부가세 · 결제 수수료를 반영한 **한국 도착 예상 구매비용(원)** 으로 비교해 보여 준다.
+
+**하는 것 (구현 완료)**
+- 검색어 → 활성 쇼핑몰 동시 조회 → 예상 구매비용 계산 → 정렬
+- **같은 상품 묶기** (다나와식): 쇼핑몰 · 판매처가 달라도 같은 모델 + 같은 용량이면 상품 1개 아래 판매처 여러 줄 (4-5)
+- 검색 상단 체크표(제조사 · 모델 · 용량 · 색상), 색상별 최저가, 상세의 "다른 구성"(용량별)
+- 이상 가격(할부 · 계약금 표기, 터무니없이 싼 가격) 표시 후 비교에서 제외
+- 상품 상세(단건 갱신 · stale 표시), 가격 변동 그래프, 환율 조회, 홈(행사 목록)
+- 회원(세션 로그인), 관심 상품, 가격 알림(목표가 · 30일 최저 · 행사 시작 · 쿠폰 마감), 받은 알림
+
+**하지 않는 것**
+- AI 사용, 이메일 · 푸시 알림, 평점 · 인기순 정렬(가격순으로 대체), 카테고리 필터, 홈 인기 상품(빈 배열)
+- 합산 과세(같은 날 여러 상품), 확정 세액 보장 — 화면 금액은 예상값
 
 ---
 
@@ -41,64 +49,57 @@
 
 ```
 GET /api/products?q=아이폰 17
- 1. 검색어 검증 (1~50자) · 정규화 · 한영 별칭 변환 (아이폰 → iphone)
- 2. 활성 쇼핑몰 소스에 동시 호출 (가상 스레드, 소스별 타임아웃)
-      └ 소스별 캐시 확인 (검색어 기준 10분) → 있으면 외부 호출 없음
- 3. 1차 걸러내기: 새 상품만, 액세서리 · 부품 제외, 한국 배송 불가 제외
- 4. 각 offer마다 계산 (5장): 배송비 → 할인(쿠폰은 DB) → 환율 → 관세 · 부가세 → 수수료
- 5. (묶기 없음: ProductGrouper no-op)
- 6. 예상 구매비용 오름차순 정렬, 필터, 페이지 자르기
- 7. 반환 (소스별 상태 포함)
- * 소스 응답을 받으면 DB에 저장(upsert)하고 productId를 붙인다 (4-3)
+ 1. 검색어 검증(1~50자) · 공백 정리 · 한영 별칭 변환 (아이폰17 → iphone 17)
+ 2. 활성 소스 동시 호출 (가상 스레드, 소스당 연결 2초 + 읽기 3초 + 1초)
+      └ 소스별 캐시 (검색어 기준 10분, 최대 500건) → 있으면 외부 호출 없음
+      └ 하루 호출 예산 · 429 이후 10분 쉬기 확인
+ 3. 걸러내기: 새 상품만, 액세서리 · 부품 · 디지털 · 빈티지 · 통신사 잠김 · 박스만 제외 (6-2)
+ 4. DB 저장(upsert) + 묶기 키로 같은 상품에 연결 + 가격 이력 → productId 부여 (캐시 미스일 때만)
+ 5. 검색어에 모델코드가 있으면 그 코드가 상품명에 있는 리스팅만 남김
+ 6. 계산: 배송비 → 할인 → 환율 → 관세 · 부가세 → 수수료 (환율 없는 통화는 제외)
+ 7. productId 로 묶기 → 이상 가격 표시 → 필터 → 정렬 → 체크표 → 페이지 → 응답 (소스별 상태 포함)
 ```
 
-### 2-2. 스케줄러 (사용자 요청과 무관)
+### 2-2. 스케줄러 (Asia/Seoul)
 
-| 작업 | 시각 (Asia/Seoul) | 내용 |
+| 작업 | 시각 | 내용 |
 | --- | --- | --- |
-| 환율 수집 | 평일 11:30, 15:00 재시도 | 한국수출입은행 API → `exchange_rates` |
-| 관심 상품 가격 갱신 | 6시간마다 | 찜 · 알림이 걸린 상품만 쇼핑몰 API로 다시 조회 → 가격 저장 → 알림 판정 |
+| 환율 수집 | 평일 11:30, 빈 결과면 15:00 재시도 | 수출입은행 → `exchange_rates`. 서버 시작 시 오늘 값이 없으면 하루씩 거슬러(최대 7일) 최근 영업일 값 수집 |
+| 관심 상품 가격 갱신 | 6시간마다 (0 · 6 · 12 · 18시) | 찜 · 활성 알림이 걸린 상품만 다시 조회 → 저장 → 이력 → 알림 판정 |
+| 행사 알림 | 매일 09:00 (+ 6시간 작업 때도) | EVENT_START · COUPON_EXPIRY 판정 |
 
-검색 때 저장된 가격이 있어서 **관심 상품이 아닌 상품은 갱신하지 않는다**. 가격 이력도 검색됐거나 갱신된 상품 기준으로만 쌓인다.
+관심 상품이 아닌 상품은 갱신하지 않는다. 가격 이력도 검색됐거나 갱신된 상품만 쌓인다.
 
 ---
 
-## 3. 프로젝트 구조
+## 3. 프로젝트 구조와 기술
 
-패키지 루트는 기존 프로젝트 것을 따르고, 없으면 `com.globalprice`.
-
-```
-config        RestClient · 캐시 · 스케줄러 · 세션 · 프로퍼티(record)
-common        ErrorCode, ApiException, 전역 예외 처리, 시간(Clock) 빈
-auth          회원가입 · 로그인 (users)
-search        검색 서비스, 별칭 변환, 걸러내기, ProductGrouper
-source        MallSource 인터페이스 + ebay / shopify / aliexpress / etsy 구현
-rate          한국수출입은행 환율 클라이언트 · 환율 서비스
-pricing       PriceCalculator (순수 함수), 규칙 조회 (shipping/tax/fee/events)
-catalog       상품 저장(upsert) · 상세 · 가격 이력
-wishlist      관심 상품
-alert         알림 조건 · 판정 · 받은 알림
-scheduler     환율 · 관심 상품 갱신 작업
-web           @RestController
-```
-
-- 계층: Controller → Service → Repository. `source`와 `rate`만 외부 HTTP를 호출한다.
-- `pricing.PriceCalculator`는 DB · 시간 · 네트워크에 의존하지 않는 순수 함수로 만든다 (입력은 값, 출력은 값).
-
-### 기술 선택
+| 패키지 | 역할 |
+| --- | --- |
+| config | 설정(record) · RestClient · Caffeine 캐시 · Clock · 로그인 인터셉터 등록 |
+| exception | ErrorCode · BusinessException · 전역 예외 처리 |
+| common | ErrorResponse, api_sync_logs 기록 |
+| auth | 회원가입 · 로그인 · 로그인 인터셉터 (JPA) |
+| source | `MallSource` 인터페이스, ebay / shopify / aliexpress / etsy 구현, 호출 예산 · 쿨다운(SourceGuard) |
+| rate | 수출입은행 클라이언트 · 환율 서비스 |
+| pricing | `PriceCalculator` (순수 함수) · 규칙 조회 |
+| catalog | 상품 저장(upsert) · 묶기(`ProductMatcher` · `ModelCode`) · 출발국(`Origin`) · 이상 가격(`PriceOutliers`) · 색상(`ColorName`) · 상세 · 가격 이력 · 응답 모양(Views) |
+| search | 검색 서비스 · 별칭 · 걸러내기(`ResultFilter`) · `SameProductGrouper` · 관련도 정렬 · 체크표 · 소스 호출(SourceCaller) |
+| wishlist / alert | 관심 상품, 알림 조건 · 판정 · 받은 알림 (JPA) |
+| scheduler / web | 스케줄 작업, `@RestController` |
 
 | 항목 | 선택 |
 | --- | --- |
 | 웹 | Spring Web MVC + Bean Validation |
-| 외부 호출 | `RestClient` (동기). 가상 스레드에서 병렬 실행 |
-| 동시 호출 | `Executors.newVirtualThreadPerTaskExecutor()` + `Future.get(timeout)`. `StructuredTaskScope`는 Java 25에서도 미리보기라 쓰지 않는다 |
-| 캐시 | Spring Cache + Caffeine (소스별 검색 결과, 10분, 최대 500건) |
-| 영속성 | Spring Data JPA, `ddl-auto: none`, `open-in-view: false`. 대량 upsert는 `JdbcTemplate` 허용 |
-| 로그인 | `HttpSession` + `spring-security-crypto`(BCrypt). Spring Security 전체는 쓰지 않는다 |
-| JSON | Boot 4 기본 Jackson 사용 **[확인: 패키지명 · 설정 방식]** |
-| 테스트 | JUnit 5, MockWebServer(또는 WireMock), Testcontainers MySQL 8 |
+| 외부 호출 | `RestClient`(JDK HttpClient), 가상 스레드 + `Future.get(timeout)` (`StructuredTaskScope`는 미리보기라 안 씀) |
+| 캐시 | Spring Cache + Caffeine (10분, 500건) |
+| 영속성 | JPA(회원 · 찜 · 알림) + JdbcTemplate(상품 · 가격 · 규칙 · 환율), `ddl-auto: none`, `open-in-view: false` |
+| 로그인 | `HttpSession` + BCrypt(`spring-security-crypto`). Spring Security 전체는 안 씀 |
+| JSON | Boot 4 기본 Jackson 3 (`tools.jackson`) |
+| 테스트 | JUnit 5, JDK 내장 HttpServer 가짜 서버, Testcontainers MySQL 8 |
+| JDK | Gradle foojay resolver 로 JDK 25 자동 다운로드 |
 
-Boot 4.1.1의 스타터 이름(웹은 `spring-boot-starter-webmvc` 등)과 Jackson 버전은 프로젝트를 만들 때 **[확인]**. `spring.threads.virtual.enabled=true`.
+계층: Controller → Service → Repository. 외부 HTTP는 `source`와 `rate`만 호출한다. `PriceCalculator`는 DB · 시간 · 네트워크에 의존하지 않는다.
 
 ---
 
@@ -107,333 +108,394 @@ Boot 4.1.1의 스타터 이름(웹은 `spring-boot-starter-webmvc` 등)과 Jacks
 ### 4-1. 공통 인터페이스
 
 ```java
-public interface MallSource {
-    String sourceName();                              // api_sources.source_name
-    boolean enabled();
-    List<MallOffer> search(String query, SearchOptions options);   // 검색
-    List<MallOffer> refresh(List<String> externalProductIds);      // 저장된 상품 가격 갱신
+interface MallSource {
+  String sourceName();    // api_sources.source_name (EBAY_BROWSE 등)
+  String storeKey();      // 검색 stores 파라미터 값 (ebay, shopify, etsy, aliexpress)
+  boolean enabled();      // 설정 enabled + 키가 있을 때만 true
+  int dailyBudget();
+  List<MallOffer> search(String query, SearchOptions options);
+  List<MallOffer> refresh(List<String> externalProductIds);
+  int refreshBatchSize(); // eBay 1, Shopify 50, AliExpress 20, Etsy 100
 }
-
-public record MallOffer(
-    String externalProductId,          // mall_products.external_product_id
-    String externalVariantId,          // 옵션 구분이 없으면 "DEFAULT"
-    String title,
-    String variantName,                // 예: 256GB (모르면 null)
-    BigDecimal price,                  // 쇼핑몰 통화 기준, 소수 그대로
-    String currencyCode,               // USD, JPY, EUR ...
-    BigDecimal shippingFee,            // 한국 배송비를 응답으로 받으면 값, 모르면 null
-    String condition,                  // NEW만 통과
-    String originCountry,              // 모르면 null → shopping_malls.country_code 사용
-    String productUrl,                 // 가능하면 제휴 링크 (AliExpress)
-    String imageUrl,
-    StockStatus stock,                 // IN_STOCK / OUT_OF_STOCK / UNKNOWN
-    Integer shipDays,                  // 알면 값 (동률 정렬용)
-    String gtin) {}                    // 알면 값 (2차 묶기용, 1차는 저장만 하지 않아도 됨)
 ```
 
-- 소스 실패는 `SourceException`(sealed: `RateLimited`, `AuthFailed`, `Timeout`, `BadResponse`)으로 올린다. 소스 하나가 실패해도 다른 소스 결과는 그대로 쓴다.
-- 새 쇼핑몰 = `MallSource` 구현체 1개 + `api_sources` 1행 + `shopping_malls` 1행.
+`MallOffer`: externalProductId, externalVariantId(`"DEFAULT"`), title, variantName, price, currencyCode, shippingFee(모르면 null), condition, originCountry(모르면 null), productUrl, imageUrl, stock, shipDays, gtin
 
-### 4-2. 소스별 명세
+- 실패는 sealed `SourceException` (`RateLimited` · `AuthFailed` · `Timeout` · `BadResponse`). 한 소스가 실패해도 다른 소스 결과는 그대로 쓴다.
+- 새 쇼핑몰 = `MallSource` 구현 1개 + `api_sources` 1행 + `shopping_malls` 1행.
 
-#### eBay Browse API (먼저 구현)
+### 4-2. 소스별 명세 (실제 호출로 확인한 내용)
+
+#### eBay Browse API
 
 | 항목 | 내용 |
 | --- | --- |
-| 검색 | `GET https://api.ebay.com/buy/browse/v1/item_summary/search?q={q}&filter=deliveryCountry:KR,conditions:{NEW}&sort=price&limit=20` |
-| 헤더 | `Authorization: Bearer {앱 토큰}`, `X-EBAY-C-MARKETPLACE-ID: EBAY_US`, `X-EBAY-C-ENDUSERCTX: contextualLocation=country=KR` |
-| 인증 | OAuth client credentials. 토큰은 메모리에 두고 만료 전에 갱신 **[확인: 토큰 URL · scope]** |
-| 갱신 | 단건 `getItem`으로 갱신 **[확인]** |
-| 매핑 | `itemId`→externalProductId, `price.value`/`price.currency`, `shippingOptions[].shippingCost`, `itemWebUrl`, `image.imageUrl`, `itemLocation.country`, `condition` |
-| 한도 | 기본 하루 5,000회. 개발 중에는 샌드박스(`api.sandbox.ebay.com`) 사용. 운영 키는 eBay 승인 필요 |
-| 비고 | 검색 결과에는 용량 · 색상 옵션이 구분되지 않을 수 있다 → 옵션은 `DEFAULT` 1건으로 저장 |
+| 검색 | `GET /buy/browse/v1/item_summary/search?q=&filter=deliveryCountry:KR,conditions:{NEW}&limit=20`. `sort=price` 안 씀 (최저가순 상위가 전부 $0.99 케이스 · 필름) → Best Match 로 받아 우리 쪽에서 정렬 |
+| 헤더 | `Authorization: Bearer {앱 토큰}`, `X-EBAY-C-MARKETPLACE-ID: EBAY_US`, `X-EBAY-C-ENDUSERCTX: contextualLocation=country=KR`, `Accept-Language: en-US` (없으면 제목이 한국어 기계번역) |
+| 인증 | client credentials. 토큰 URL `/identity/v1/oauth2/token`, scope `https://api.ebay.com/oauth/api_scope`, 7200초 → 메모리 보관, 만료 60초 전 갱신 |
+| 가격 | contextualLocation=KR 이면 `value`가 KRW 로 옴 → `convertedFromValue` · `convertedFromCurrency`(원래 통화)를 저장하고 우리 환율로 계산. 배송비도 같은 방식 |
+| 상태 | conditionId 1000(New) · 1500(New other)을 새 상품으로 |
+| 출발국 | `itemLocation.country` (eBay US 안에서도 CN · TW · DE 등) |
+| 갱신 | `GET /buy/browse/v1/item/{itemId}` 단건. `estimatedAvailabilities`로 재고 판단 |
+| 한도 | 하루 5,000회 |
+| 남은 일 | 제휴 링크(`itemAffiliateWebUrl`)는 eBay Partner Network 캠페인 ID 필요 |
 
-#### Shopify (Global Catalog MCP)
-
-팀원이 아래 호출로 응답을 확인했다. 개별 상점이 아니라 Shopify 전역 카탈로그를 한 번에 검색한다.
-
-```
-POST https://catalog.shopify.com/api/ucp/mcp
-Accept: application/json, text/event-stream
-Content-Type: application/json
-
-{"jsonrpc":"2.0","method":"tools/call","id":1,
- "params":{"name":"search_catalog","arguments":{
-   "meta":{"ucp-agent":{"profile":"https://shopify.dev/ucp/agent-profiles/2026-04-08/valid-with-capabilities.json"}},
-   "catalog":{"query":"wireless headphones"}}}}
-```
+#### Shopify Global Catalog (UCP MCP)
 
 | 항목 | 내용 |
 | --- | --- |
-| 인증 | 키 없이 호출됨. 에이전트 프로필 URL은 `application.yml` 설정값으로 둔다. 위 URL이 운영에서도 허용되는지 **[확인]** |
-| 응답 형식 | JSON 또는 `text/event-stream`(SSE) 둘 다 올 수 있으므로 둘 다 파싱 |
-| 도구 | `search_catalog`(검색), `lookup_catalog`(ID 목록 조회, 최대 50개), `get_product`(상세) **[확인]** |
-| 필터 | `catalog.filters`의 `price`(최소 통화 단위 정수), `condition`(`new`), 판매자 출발국 등 **[확인: 정확한 키]** |
-| 가격 | **최소 통화 단위 정수** (USD 12345 = 123.45). 통화별 소수 자릿수 반영해 환산 (JPY는 0자리) |
-| 응답 구조 | 상품 아래 여러 판매자의 offer. 1차는 offer 하나를 `MallOffer` 하나로 펼쳐서 쓴다 (묶지 않음) |
-| 쇼핑몰 행 | 판매자(shop) 단위 `shopping_malls` 자동 생성은 하지 않고, 1차는 `Shopify` 1행으로 통일 **[결정]**. `external_product_id`는 판매자 구분이 필요하면 `{shop}:{id}` 형식으로 만든다 |
-| 주의 | 기존 Global Catalog REST API는 2026-11-02 종료. 쓰지 않는다 |
+| 호출 | `POST https://catalog.shopify.com/api/ucp/mcp`, JSON-RPC `tools/call`. 키 없음. `meta["ucp-agent"].profile` 필수 |
+| 검색 | `search_catalog`: `catalog.query`, `filters { ships_to: {country: KR}, condition: [new] }`, `context { address_country: KR, currency: USD }`, `pagination.limit`(최대 50) |
+| 갱신 | `lookup_catalog`: `catalog.ids` (1~50개, ProductVariant GID) |
+| 응답 | `result.structuredContent.products[] → variants[]`. 가격은 최소 통화 단위 정수 (3199 USD = 31.99). JSON · SSE 둘 다 파싱 |
+| 펼치기 | 상품 아래 판매자(seller)별 최저가 옵션 1개 = offer 1건. `external_product_id` = ProductVariant GID |
+| 구매 링크 | 옵션 상품 페이지 url > 상품 url > checkout_url > 판매자 url (utm 등 attribution 유지) |
+| 출발국 | 응답에 없음 → 결제 통화로 추정 (5장 규칙 선택). USD 를 요청해도 일부 상점은 현지 통화(AED · KWD · 원화 등)를 줌 |
+| 주의 | 키 없는 요청은 IP 공유 한도라 운영 비권장. 프로필은 팀이 직접 호스팅해야 함. 옛 Global Catalog REST API는 2026-11-02 종료 |
+
+#### Etsy Open API v3
+
+| 항목 | 내용 |
+| --- | --- |
+| 인증 | `x-api-key: {keystring}:{shared_secret}`. 한도 초당 5 · 하루 5,000 (`x-limit-*` 헤더) |
+| 검색 | `GET /v3/application/listings/active?keywords=&limit=&sort_on=score` (가격순은 SVG 도안 · 공예 재료만 나옴) |
+| 가격 | `price = {amount, divisor, currency_code}` → amount ÷ divisor. 판매자마다 통화가 다름 |
+| 이미지 | 검색 응답에 없음 → `/listings/batch?listing_ids=&includes=Images` 1회 추가 호출 (실패해도 결과는 그대로) |
+| 걸러내기 | `listing_type=download` → DIGITAL, `is_supply` → SUPPLY, `when_made` 2007년 이전 → VINTAGE 로 표시해 제외 |
+| 갱신 | 같은 batch API (최대 100) |
 
 #### AliExpress Affiliate API
 
 | 항목 | 내용 |
 | --- | --- |
-| 엔드포인트 | `https://api-sg.aliexpress.com/sync` + `method` 파라미터 **[확인: 경로]** |
-| 메서드 | 검색 `aliexpress.affiliate.product.query`, 상세 `aliexpress.affiliate.productdetail.get`(`product_ids` 콤마 구분) |
-| 공통 파라미터 | `app_key`, `method`, `timestamp`, `sign_method`, `format=json`, `v=2.0`, `sign` |
-| 서명 | 모든 파라미터를 key 오름차순으로 `key+value` 이어 붙여 HMAC(app_secret) 후 대문자 16진수. SHA256 우선, 안 되면 MD5 **[확인]**. 서명 계산은 단위 테스트로 검증 |
-| 검색 파라미터 | `keywords`, `page_no`, `page_size`, `tracking_id`(필수), `target_currency`, `target_language`, `ship_to_country=KR`, `sort` **[확인: ship_to_country 지원]** |
-| 응답 | `aliexpress_affiliate_product_query_response.resp_result` → `resp_code == 200` 확인 → `result.products[]` |
-| 매핑 | `product_id`, `target_sale_price`, `target_original_price`, `product_detail_url`·`promotion_link`(구매 링크는 `promotion_link`), `product_main_image_url`, `ship_to_days` |
-| 비고 | 배송비 없음 → `shipping_rules` 사용. 옵션 없음 → `DEFAULT`. 제휴 승인 필요 |
-
-#### Etsy Open API v3 (마지막, 범위 재검토 대상)
-
-| 항목 | 내용 |
-| --- | --- |
-| 검색 | `GET https://openapi.etsy.com/v3/application/listings/active?keywords={q}&limit=20&sort_on=price&sort_order=asc` |
-| 인증 | 공개 조회는 `x-api-key` 헤더만. OAuth 불필요 |
-| 가격 | `price = {amount, divisor, currency_code}` → `amount ÷ divisor` |
-| 배송비 | 응답에 한국 배송비 없음 → `shipping_rules` |
-| 한도 | 자료마다 다름(초당 5~10, 하루 5,000~10,000) → 보수적으로 초당 5회로 시작 **[확인]** |
-| 위험 | 수공예 · 빈티지 중심이라 전자기기 신품 비교와 맞지 않을 수 있다. 구현은 하되 `globalprice.sources.etsy.enabled=false`로 시작하고, 결과를 본 뒤 켤지 정한다 |
+| 호출 | `https://api-sg.aliexpress.com/sync` + `method`. 공통 파라미터 `app_key` · `method` · 밀리초 `timestamp` · `sign_method=sha256` · `format=json` · `v=2.0` |
+| 서명 | 파라미터 key 오름차순 `key+value` 연결 → HMAC-SHA256(app_secret) → 대문자 hex |
+| 검색 | `aliexpress.affiliate.product.query`: keywords, page_no, page_size, `target_currency=USD`, `target_language=EN`, `ship_to_country=KR`, [tracking_id]. sort 안 씀 (`SALE_PRICE_ASC`는 상위가 전부 $0.03~0.14 소품) |
+| 갱신 | `aliexpress.affiliate.productdetail.get`: product_ids 콤마 구분 (배치 20) |
+| 응답 | `resp_result.resp_code` 200 → `result.products.product[]`. `target_sale_price`(문자열) · `target_sale_price_currency`, `product_detail_url`, `promotion_link`, `product_main_image_url`. `ship_to_days`는 오지 않음 |
+| tracking_id | 선택. 없으면 `promotion_link`가 상품과 무관한 같은 링크로 옴 → 없으면 `product_detail_url`, 있으면 `promotion_link` |
+| 출발국 | **응답에 발송지 필드가 없어 `CN`으로 고정.** 해외 창고 상품도 구분 불가. 면세 한도는 더 엄격한 $150 쪽 |
+| 배송비 | 응답에 없음 → `shipping_rules` ($3, $10 이상 무료). 옵션 없음 → `DEFAULT` |
+| 한계 | 브랜드명 검색이 약함 (airpods → 원예용 pods 등 무관 상품) |
 
 ### 4-3. 저장 규칙 (검색 결과 → DB)
 
-소스 응답을 받으면 (캐시 미스일 때만) 아래처럼 저장하고, 각 offer에 `productId`를 붙인다.
+1. `mall_products`를 `(mall_id, external_product_id)`로 조회.
+   - 없으면 묶기 키(4-5)로 `products`를 찾고, 없으면 새로 만든 뒤 `mall_products` 1행을 붙인다. `listing_title`에 쇼핑몰 원래 상품명을 저장.
+   - 있으면 `listing_title` · URL · 통화 · 배송비 · `last_fetched_at` 갱신. 지금 상품명으로 만든 묶기 키가 상품의 키와 다르면 맞는 상품으로 옮긴다 (예전 1 리스팅 = 1 상품 데이터도 다시 검색되면 합쳐짐).
+     - 혼자인 상품이고 맞는 키 상품이 없으면 → 그 상품에 키를 달고 대표 이름으로 바꿈
+     - 그 밖에는 → 리스팅을 옮기고, 빈 상품은 찜을 옮긴 뒤 삭제. 단 혼자인 상품에 가격 알림이 있으면 알림이 끊기지 않게 그대로 둠
+2. `mall_product_variants`를 `(mall_product_id, external_variant_id)`로 upsert (`current_price`, `stock_status`).
+3. `price_history`: 마지막 기록과 가격이 같고 6시간이 안 지났으면 기록하지 않음. `total_amount_krw`는 쿠폰을 뺀 기본 계산값(SALE은 적용), 계산 불가면 null.
+4. offer마다 트랜잭션을 따로 둔다. 저장에 실패한 offer는 응답에서 빼고 로그만 남긴다. 같은 상품 · 같은 묶기 키를 동시에 처음 저장하면(중복 키) 한 번 다시 시도.
 
-1. `mall_products`를 `(mall_id, external_product_id)`로 조회. 없으면 `products`(`product_name`=제목, `image_url`, 나머지 null) 1행과 `mall_products` 1행을 만든다.
-2. `mall_product_variants`를 `(mall_product_id, external_variant_id)`로 upsert (`current_price`, `stock_status`). `mall_products.last_fetched_at` 갱신, 통화 · 배송비 · URL 갱신.
-3. `price_history`에 현재 가격을 기록한다. **마지막 기록과 가격이 같고 6시간이 안 지났으면 기록하지 않는다** (이력 폭증 방지). `total_amount_krw`는 쿠폰을 뺀 기본 계산값(5장), 계산이 불가하면 null.
-4. 저장 실패가 검색 응답을 막지 않게 한다. 저장에 실패한 offer는 `productId` 없이 응답하지 말고 **그 offer만 응답에서 제외**하고 로그를 남긴다 (프론트가 상세로 이동할 수 없기 때문).
+`price_calculations` 테이블은 쓰지 않는다 (계산은 요청마다 메모리에서). `mall_product_variants.normalized_option_key` · `search_aliases`는 DB에만 있고 백엔드는 아직 쓰지 않는다 (13장).
 
-`price_calculations` 테이블은 1차에서 **사용하지 않는다** (계산은 요청마다 메모리에서). 삭제하지 말고 둔다.
-
-### 4-4. 2차 대비 (지금 만들 것)
-
-```java
-public interface ProductGrouper {
-    List<ProductGroup> group(List<PricedOffer> offers);
-}
-// 1차 구현: offer 1개 = ProductGroup 1개 (NoopProductGrouper)
-```
-
-응답은 처음부터 **그룹 단위 `{product, offers[]}`** 로 만든다. 1차에서 `offers`는 항상 1개다. 2차에 묶기가 들어와도 응답 형태가 바뀌지 않는다.
-
-### 4-5. 소스 호출 정책
+### 4-4. 소스 호출 정책
 
 | 상황 | 동작 |
 | --- | --- |
-| 타임아웃 | 연결 2초 · 읽기 3초. 검색 전체는 소스 병렬이라 최대 약 5초 |
-| 5xx | 검색(사용자 요청 중)은 재시도하지 않고 그 소스를 `error`로 표시. 스케줄러 갱신은 최대 3회(1·2·4초) |
-| 429 | 재시도하지 않고 그 소스를 `error`로 표시. 이후 일정 시간(기본 10분) 그 소스 호출 중단 |
-| 401 · 403 | 재시도 안 함, 즉시 `api_sync_logs`에 기록, 로그에 키 노출 금지 |
-| 형식 오류 | 해당 건만 건너뜀, 전체 파싱 불가면 `BadResponse` |
-| 일일 예산 | 소스별 하루 호출 상한(`daily-budget`)을 메모리 카운터로 센다. 초과 시 그 소스는 `skipped` |
+| 타임아웃 | 연결 2초 · 읽기 3초. 검색은 소스당 최대 6초 기다리고 넘으면 `timeout` (작업은 뒤에서 끝나 캐시에 남음) |
+| 5xx | 검색: 재시도 없이 `error`. 스케줄러 갱신: 1 · 2 · 4초 간격 최대 3회 |
+| 429 | 재시도 없음, `error`. 이후 10분 동안 그 소스 호출 안 함 |
+| 401 · 403 | 재시도 없음. `api_sync_logs` 기록, 로그에 키 · 토큰 · 서명 미노출 |
+| 형식 오류 | 그 건만 건너뜀. 전체를 못 읽으면 `BadResponse` |
+| 하루 예산 | 소스별 메모리 카운터 (`daily-budget`). 넘으면 `skipped` |
 
-`api_sync_logs`에는 **스케줄러 회차와 검색 중 실패 건만** 기록한다 (성공한 검색 호출까지 쓰면 행이 폭증한다). 필드: `status`(`SUCCESS`/`PARTIAL`/`FAILED`), `http_status`, `records_fetched`, `records_skipped`, `error_message`.
+`api_sync_logs`에는 스케줄러 회차(소스당 1행)와 검색 중 실패 건만 남긴다.
+
+### 4-5. 같은 상품 묶기 (`ProductMatcher` → `products.match_key`)
+
+원칙: **잘못 묶는 것(다른 상품이 한 줄에 섞임)보다 덜 묶는 것(같은 상품이 두 줄)이 낫다.** 상품명 + 옵션 이름으로 키를 만든다.
+
+| 순서 | 대상 | 키 형식 | 대표 이름 |
+| --- | --- | --- | --- |
+| 1 | iPhone | `iphone\|모델\|용량` | `Apple iPhone 17 Pro 256GB` |
+| 1 | Galaxy | `galaxy\|시리즈\|번호\|접미사\|용량` | `Samsung Galaxy ...` |
+| 1 | Pixel | `pixel\|세대\|접미사\|용량` | `Google Pixel ...` |
+| 1 | MacBook | `macbook\|라인\|크기\|칩\|RAM\|SSD` | `Apple MacBook ...` |
+| 1 | iPad | `ipad\|라인\|크기\|칩·세대\|용량\|wifi·cell` | `Apple iPad ...` |
+| 2 | 상품명에 모델코드가 하나뿐 (위 5개 품목 제외, 갤럭시 SM- 코드는 허용) | `code:{코드}` | 리스팅 원래 이름 |
+| 3 | 그 밖 | `t:{소문자 · 공백 정리한 상품명}` (6자 이상) | 리스팅 원래 이름 |
+
+- 색상 · 통신사 · 언락 · 배송 문구는 무시한다 (판매처 줄에서 원래 상품명 `title`로 보여 줌).
+- 묶지 않는 경우: 한 상품명에 용량이나 모델이 여러 개, 용량 없음, 세트 · 묶음(`bundle`, `combo`, `set of`, `with case`, `세트`, `사은품` 등) → 다음 순서로 넘어감.
+- **모델코드** (`ModelCode`): 영문 + 숫자 5~20자, 숫자 3개 이상 (또는 6자 이상 · 숫자 2개 · 영문 3개). `256GB` · `240Hz` 같은 단위와 `iPhone17` 같은 제품 이름은 제외. 비교 시 대소문자 · 하이픈 · 공백 무시 (`SM-S938B` = `sms938b`).
+- **다른 구성**: 키에서 용량을 뺀 부분(family, 예 `iphone|17 pro`)이 같은 상품들. 상세 `configs`로 내려준다.
+
+### 4-6. 이상 가격 (`PriceOutliers`)
+
+걸린 판매처는 지우지 않고 `status: "suspicious"`로 표시해 **최저가 · 정렬 · 비교에서만 뺀다** (품절과 같은 방식).
+
+1. 할부 · 계약금 표기: 상품명에 `installment`, `monthly`, `/mo`, `deposit`, `down payment`, `할부`, `월 납`, `계약금`, `分期` 등이 있으면 일시불 총액이 아님.
+2. 같은 상품에 비교 가능한 판매처가 3곳 이상이면, 중간값의 1/3보다 싼 판매처.
+3. 판매처가 1~2곳뿐이면: 같은 모델 다른 구성(용량만 다름)이 2개 이상일 때 그 최저가들의 중간값 1/3보다 싸면. 다른 구성이 없으면 같은 시리즈(세대만 다름, 예 Z Fold2~7)가 3개 이상일 때 중간값의 1/5보다 싸면.
 
 ---
 
 ## 5. 가격 계산 (PriceCalculator)
 
-DB의 규칙 · 환율과 offer만 입력으로 받는 순수 함수. 모든 금액은 `BigDecimal`, **항목마다 원 단위 HALF_UP 반올림 후 합산**한다 (환율은 소수 6자리).
+DB 규칙 · 환율 · offer만 입력으로 받는 순수 함수. 모든 금액은 `BigDecimal`, **항목마다 원 단위 HALF_UP 반올림 후 합산** (환율은 소수 6자리).
 
-### 입력 / 출력
+| 순서 | 계산 |
+| --- | --- |
+| 1. 환율 | 통화별 최신 `base_date`의 `tts_rate`(전신환매도율), 없으면 `rate_to_krw`. KRW는 1. 환율이 없는 통화는 계산 불가(`unavailable`) |
+| 2. 상품가 | `round(price × 환율)` |
+| 3. 할인 | 같은 쇼핑몰 · 활성 · 기간 안 · 최소 구매금액(쇼핑몰 통화) 충족 행사 중 할인액이 가장 큰 1건. SALE은 항상, COUPON은 `coupon=true`일 때만. RATE는 `max_discount_amount`로 상한, AMOUNT는 `discount_value`, 할인 정보 없는 SALE은 0. 원화 환산 후 `min(할인, 상품가)` |
+| 4. 배송비 | offer 배송비 > 활성 `shipping_rules`(무료배송 기준 이상이면 0) > 모름(0, `shippingKnown=false`, 화면 "배송비 미포함") |
+| 5. 면세 판정 | (상품가 − 할인)을 USD로 환산해 면세 한도 이하면 관세 · 부가세 0 (배송비 제외). 출발국 미국 $200, 그 외 $150 |
+| 6. 관세 · 부가세 | 과세가격 = 상품가 − 할인 + 배송비. 관세 = `round(과세가격 × 관세율)`, 부가세 = `round((과세가격 + 관세) × 부가세율)`. 둘의 합이 10,000원 미만이면 둘 다 0 (관세법 제40조) |
+| 7. 수수료 | `round((상품가 − 할인 + 배송비) × fee_rate + fixed_fee_krw)`. KRW 이면서 쇼핑몰 국가가 KR(국내 직구관)일 때만 0 |
+| 8. 합계 | 상품가 − 할인 + 배송비 + 관세 + 부가세 + 수수료 |
 
-```
-입력: offer(price, currency, shippingFee?, mall, originCountry), 환율 맵, 규칙(shipping/tax/fee), 행사 후보, couponEnabled
-출력: Breakdown { productPriceKrw, discountAmountKrw, shippingFeeKrw, customsDutyKrw, vatKrw,
-                  paymentFeeKrw, totalAmountKrw, appliedEvent?, shippingKnown, taxExempt, fxBaseDate }
-```
+### 규칙 선택 · 예외 처리
 
-### 계산 순서
+- **출발국** (`Origin`, 면세 한도 · 세금 규칙 · 화면 국가 표시에 공통):
+  1. 쇼핑몰 API가 준 값 (eBay `itemLocation.country`, AliExpress는 `CN` 고정)
+  2. 쇼핑몰 나라가 CN(AliExpress)이면 CN — USD로 바꿔 받으므로 통화로 추정하면 안 됨. DB에서 다시 읽은 리스팅(출발국 미저장)도 이 규칙으로 CN
+  3. 결제 통화가 쇼핑몰 기본 통화와 같으면 쇼핑몰 나라
+  4. 원화면 쇼핑몰 나라, 유로면 알 수 없음(null → 쇼핑몰 나라로 계산, 화면 "유럽(유로)")
+  5. 그 밖에는 통화의 나라 (Shopify AED 상점 → 아랍에미리트, eBay CAD 판매자 → 캐나다)
+- 세금: 활성 `tax_rules` 중 `카테고리+국가 > 카테고리 > 국가 > 기본`. 카테고리를 모르므로 실제로는 `국가 > 기본`.
+- 수수료: 활성 규칙이 여러 개면 `globalprice.pricing.fee-rule-name`(기본 "해외 결제 수수료") 우선, 없으면 ID가 가장 작은 것.
+- 무료배송 기준은 할인 전 상품가와 비교. 규칙 통화가 offer 통화와 다르면 원화로 바꿔 비교.
+- USD 환율이 없으면 면세 여부를 알 수 없으므로 과세로 계산하고 `ruleMissing` 경고.
+- 세금 · 수수료 규칙이 없으면 오류 없이 0으로 계산하고 `ruleMissing` 경고 로그.
 
-1. **환율**: 통화별 최신 `base_date`의 `tts_rate`(전신환매도율, 없으면 `rate_to_krw`). 통화가 KRW면 1.
-2. **상품가(원)** = `round(price × 환율)`
-3. **할인** (행사는 DB의 `store_events`)
-   - 후보: 같은 `mall_id`, `is_active`, 현재 시각이 `start_at`~`end_at`, `min_purchase_amount`(쇼핑몰 통화)를 충족
-   - `SALE`은 항상 후보, `COUPON`은 `couponEnabled=true`일 때만 후보
-   - 할인액(쇼핑몰 통화): RATE → `price × discount_value`, `max_discount_amount`로 상한 / AMOUNT → `discount_value`. 할인 정보가 없는 SALE은 0
-   - 후보 중 **할인액이 가장 큰 1건만** 적용 → 원화 환산 후 `min(할인, 상품가)`
-4. **배송비**
-   - `offer.shippingFee`가 있으면 그 값 / 없으면 해당 쇼핑몰의 활성 `shipping_rules`(`base_fee`, `free_shipping_threshold` 이상이면 0)
-   - 둘 다 없으면 0으로 두고 `shippingKnown=false` (화면에서 "배송비 미포함" 안내)
-5. **면세 판정**: `(상품가 − 할인)`을 USD로 환산해 `tax_rules.exemption_amount_usd` 이하이면 관세 · 부가세 0 (배송비 제외하고 판정)
-6. **과세가격** = 상품가 − 할인 + 배송비
-   - 관세 = `round(과세가격 × duty_rate)`
-   - 부가세 = `round((과세가격 + 관세) × vat_rate)`
-   - **관세 + 부가세가 10,000원 미만이면 둘 다 0** (관세법 제40조)
-7. **결제 수수료** = `round((상품가 − 할인 + 배송비) × fee_rate + fixed_fee_krw)`. 통화가 KRW인 국내 직구관은 0
-8. **합계** = 상품가 − 할인 + 배송비 + 관세 + 부가세 + 수수료 (항목은 모두 이미 반올림된 값)
+### 검증된 기준 금액 (`03_seed_data.sql`)
 
-### 규칙 선택
-
-- 세금: 활성 `tax_rules` 중 `카테고리+국가 > 카테고리 > 국가 > 기본` 순으로 가장 구체적인 1건. 1차는 카테고리를 모르므로(`category_id` null) **국가 > 기본** 만 쓴다. 국가는 `offer.originCountry` → 없으면 `shopping_malls.country_code`.
-- 배송비 · 수수료: 위 순서대로.
-- 규칙이 하나도 없으면 오류로 터뜨리지 말고, 세금 0 · 수수료 0으로 계산하고 `ruleMissing` 경고를 로그에 남긴다.
-
-### 단위 테스트 (필수, JUnit)
-
-면세 한도 직전 · 직후(미국 $200 / 기타 $150), 정률 할인 + 최대 할인 상한, 최소 구매금액 미달 쿠폰, 정액 할인 환산, 할인액이 상품가를 넘는 경우, 할인 정보 없는 SALE, 관세 + 부가세 1만원 미만, 무료배송 기준 경계, 원화 결제(수수료 0), 배송비 정보 없음, 100단위 통화(JPY·IDR) 소수점, 규칙 우선순위, 반올림 경계. 기대값은 손계산 표를 테스트 안에 주석으로 남긴다. 시드 SQL에 기준 금액(1,187,256 / 1,254,855 / 1,104,894원)이 있으면 그 입력으로 같은 합계가 나오는지 확인한다.
+| 상품 · 판매처 | 조건 | 합계 |
+| --- | --- | --- |
+| iPhone 17 · Amazon US | $799, 배송 $15, 쿠폰 10%(최대 $50), 환율 1,400 | 1,187,256원 (쿠폰 미적용 1,264,956원) |
+| iPhone 17 · Rakuten Japan | ¥119,800, 배송 ¥1,200, 쿠폰 5%(최대 ¥2,000), 환율 9.5 | 1,254,855원 |
+| Galaxy S25 · Amazon US | $749, 배송 $12, 쿠폰 10%(최대 $50) | 1,104,894원 |
 
 ---
 
-## 6. 내부 API
+## 6. API (프론트 ↔ 백엔드)
 
-공통: JSON · UTF-8 · camelCase. 원화 금액은 정수, 쇼핑몰 통화 금액은 소수 허용(`currencyCode` 동반). 시각은 `yyyy-MM-dd'T'HH:mm:ss`(KST). 인증은 세션 쿠키(`JSESSIONID`). 페이지는 `page`(0부터) · `size`(기본 20, 최대 50).
+프론트 `static/js/api.js`가 호출하는 형식이다. **필드 이름 · 모양은 이 장이 기준**이다.
+
+### 6-0. 공통
+
+- JSON · UTF-8 · camelCase. 성공 응답은 감싸지 않고 데이터를 그대로 보낸다.
+- 원화 금액은 정수(원), 쇼핑몰 통화 금액은 소수 (통화 코드와 함께).
+- 시각은 KST `yyyy-MM-dd'T'HH:mm:ss` (오프셋 없음).
+- 인증은 세션 쿠키 `JSESSIONID`. 프론트는 `credentials: 'same-origin'`으로 요청하고 토큰 · `Authorization` 헤더는 쓰지 않는다. 로그인 상태는 페이지가 열릴 때 `GET /api/auth/me`로 확인 (브라우저의 `gp_user`는 표시용 캐시).
+- 페이지: `page`(0부터) · `size`(1~50, 기본 20).
+- 프론트 요청 제한 시간 8초 (`TIMEOUT_MS`). 넘으면 "응답이 늦어요" 안내.
+- 프론트 목업: `js/config.js`의 `USE_MOCK: true`면 `js/mock-data.js`로 동작 (백엔드 없이). 백엔드 `static/`은 `USE_MOCK: false`인 복사본.
 
 ### 6-1. 오류 응답
 
 ```json
-{ "status": 400, "code": "INVALID_INPUT", "message": "...", "timestamp": "..." }
+{ "status": 404, "code": "PRODUCT_NOT_FOUND", "message": "상품을 찾을 수 없어요.", "timestamp": "2026-11-15T10:00:00" }
 ```
 
-| code | HTTP | 상황 |
-| --- | --- | --- |
-| INVALID_INPUT | 400 | 입력 검증 실패 (검색어 비어 있음 · 50자 초과 등) |
-| LOGIN_REQUIRED | 401 | 로그인 필요 |
-| LOGIN_FAILED | 401 | 이메일 또는 비밀번호 불일치 (어느 쪽인지 구분하지 않음) |
-| NOT_FOUND / PRODUCT_NOT_FOUND | 404 | 없음, 또는 남의 리소스 |
-| DUPLICATE_EMAIL | 409 | 이메일 중복 |
-| INTERNAL_ERROR | 500 | 서버 오류 (상세는 로그에만) |
-| EXTERNAL_INVALID_RESPONSE | 502 | 외부 응답 형식 오류 (사용자 요청에서 결과가 아예 없을 때만) |
-| EXTERNAL_API_UNAVAILABLE | 503 | 모든 소스가 실패하고 보여줄 값이 없을 때 |
+프론트는 `code`로 화면을 나누고 `message`를 보여 준다 (`js/common.js`의 `ERRORS`). `code`가 없으면 HTTP 상태로 판단. 예전 이름(`UNAUTHORIZED`, `EXTERNAL_UNAVAILABLE`)도 같은 화면.
 
-검색에서 **일부 소스만 실패한 경우는 오류가 아니라 200** 으로 응답하고 `sources`에 상태를 담는다.
+| code | HTTP | 상황 | 화면 |
+| --- | --- | --- | --- |
+| INVALID_INPUT | 400 | 입력 검증 실패 (검색어 없음 · 50자 초과 · 잘못된 period · 정렬 · 알림 조합 오류 등) | 입력값 확인 안내 |
+| LOGIN_REQUIRED | 401 | 로그인 필요 | "로그인이 필요해요" + 로그인 버튼 |
+| LOGIN_FAILED | 401 | 이메일 · 비밀번호 불일치 (구분하지 않음) | 로그인 폼 아래 message |
+| FORBIDDEN | 403 | 권한 없음 (현재 사용처 없음) | 검색 버튼 |
+| NOT_FOUND / PRODUCT_NOT_FOUND | 404 | 없음, 또는 남의 리소스 (존재 여부를 숨김) | 검색 버튼 |
+| METHOD_NOT_ALLOWED | 405 | 지원하지 않는 메서드 | 안내만 |
+| DUPLICATE_EMAIL | 409 | 이메일 중복 | 가입 폼 안내 |
+| INTERNAL_ERROR | 500 | 서버 오류 (상세는 로그에만) | 다시 시도 |
+| EXTERNAL_INVALID_RESPONSE | 502 | 호출한 소스가 모두 형식 오류이고 결과 0건 | 다시 시도 |
+| EXTERNAL_API_UNAVAILABLE | 503 | 호출한 소스가 모두 실패하고 결과 0건, 또는 환율이 하나도 없음 | 다시 시도 |
 
-### 6-2. GET /api/products — 검색 (인증 불필요)
+검색에서 일부 소스만 실패하면 오류가 아니라 200 + `sources[].status`. 필터로 고른 판매처에 연결된 API가 하나도 없으면(예: `amazon-us`) 빈 결과 200.
+
+### 6-2. 검색 — `GET /api/products` (인증 불필요)
 
 | 파라미터 | 설명 |
 | --- | --- |
-| q | 필수, 1~50자. 띄어쓴 단어는 모두 포함(AND) 의미로 소스에 전달 |
-| stores | 쇼핑몰 ID 콤마 구분 (해당 소스만 호출) |
-| countries | 출발국 코드 콤마 구분 (결과 필터) |
-| minPrice, maxPrice | 예상 구매비용(원) 범위 (결과 필터) |
-| freeShipping | `true`면 배송비 0인 것만 |
-| onSale | `true`면 할인이 적용된 것만 |
-| inStock | `true`면 재고 있는 것만 |
-| coupon | `true`면 쿠폰까지 적용해 계산 (기본 false = SALE만) |
-| sort | `price_asc`(기본), `discount_desc` |
-| page, size | 정렬된 전체 결과를 메모리에서 자른다 |
-
-카테고리 필터는 1차에서 제외한다 (소스별 카테고리 매핑이 없음). 프론트가 필요로 하면 소스별 카테고리 파라미터로 나중에 추가한다.
+| `q` | 필수, 1~50자 |
+| `stores` | 쉼표 구분. 소스 키(`ebay` · `shopify` · `etsy` · `aliexpress`) 또는 mall_id |
+| `countries` | 출발국 코드 쉼표 구분 (`US,CN,JP`). `KRW` = 국내 직구관(원화 결제) |
+| `minPrice`, `maxPrice` | 예상 구매비용(원) 범위 |
+| `freeShipping`, `onSale`, `inStock` | `true`면 무료배송 · 할인 적용 · 재고 있음만 |
+| `benefits` | 프론트용 묶음: `event`(=onSale), `freeShip`(=freeShipping), `taxIncluded`(해당 판매처 없음 → 0건) |
+| `coupon` | `true`면 쿠폰까지 적용 (기본 false = SALE만) |
+| `sort` | `price_asc`(기본) · `discount_desc`. 프론트 값 `total` · `discount`도 받음. `popular` · `rating`은 미지원 → 가격순. 그 외 400 |
+| `brands`, `models`, `storages`, `colors` | 상단 체크표에서 고른 값 (쉼표 구분, 대소문자 무시). 값은 응답 `facets[].value` |
+| `page`, `size` | 정렬된 전체 결과를 메모리에서 자름 |
 
 ```json
-{
-  "items": [
-    {
-      "productId": 101,
-      "productName": "Apple iPhone 17 256GB ...",
-      "imageUrl": "https://...",
-      "lowestTotalKrw": 1187256,
-      "offerCount": 1,
-      "offers": [
-        {
-          "mallId": 1, "mallName": "eBay US", "countryCode": "US",
-          "productUrl": "https://...",
-          "originalPrice": 799.00, "currencyCode": "USD",
-          "stockStatus": "IN_STOCK", "shipDays": null,
-          "fetchedAt": "2026-11-13T10:00:00",
-          "breakdown": {
-            "productPriceKrw": 1100000, "discountAmountKrw": 50000, "shippingFeeKrw": 30000,
-            "customsDutyKrw": 0, "vatKrw": 108000, "paymentFeeKrw": 14000, "totalAmountKrw": 1202000,
-            "shippingKnown": true, "taxExempt": false
-          },
-          "appliedEvent": { "storeEventId": 5, "eventName": "...", "eventType": "SALE" },
-          "exchangeRate": { "currencyCode": "USD", "rateToKrw": 1380.5, "baseDate": "2026-11-12" }
-        }
-      ]
-    }
-  ],
-  "sources": [
-    { "mallId": 1, "mallName": "eBay US", "status": "ok", "count": 20 },
-    { "mallId": 3, "mallName": "AliExpress", "status": "timeout", "count": 0 }
-  ],
-  "page": 0, "size": 20, "totalElements": 57, "totalPages": 3,
-  "fromCache": false,
-  "limitedToTopN": 20,
-  "suggestions": []
-}
+{ "query": "아이폰 17", "sourceQuery": "iphone 17", "total": 11, "ratesUpdatedAt": "2026-11-22T16:04:14",
+  "items": [ ProductSummary ],
+  "sources": [ { "mallId": 1, "mallName": "eBay US", "storeId": "ebay", "status": "ok", "count": 12 } ],
+  "page": 0, "size": 20, "totalElements": 11, "totalPages": 1,
+  "fromCache": false, "limitedToTopN": 20, "suggestions": [],
+  "modelCodes": [], "modelCodeExcluded": 0,
+  "facets": { "brands": [ FacetOption ], "models": [ FacetOption ], "storages": [ FacetOption ], "colors": [ FacetOption ] } }
 ```
 
-- `sources[].status`: `ok` / `timeout` / `error` / `skipped`(예산 초과 · 비활성).
-- 결과 0건이면 `items: []` + `suggestions`(비슷한 검색어 안내). 모든 소스가 실패했고 결과가 0건이면 503.
-- 소스당 상위 N건(기본 20)만 가져오므로 `limitedToTopN`을 내려 화면이 "상위 N건 기준"임을 표시할 수 있게 한다.
-- 정렬: 예상 구매비용 오름차순, 같으면 `shipDays` 짧은 순, 그다음 `mallName`. 품절은 가격과 상관없이 목록 맨 아래.
+| 필드 | 설명 |
+| --- | --- |
+| `sources[].status` | `ok` · `timeout` · `error` · `skipped`(예산 초과 · 비활성 · 키 없음) |
+| `limitedToTopN` | 소스당 상위 N건(기본 20)만 가져옴 → 화면 "상위 N건 기준" |
+| `suggestions` | 결과 0건일 때 마지막 단어를 뺀 검색어 · 영어 변환 검색어 |
+| `modelCodes` · `modelCodeExcluded` | 검색어에 모델코드(4-5)가 있으면 그 코드가 상품명에 있는 리스팅만 보여 주고, 뺀 건수 |
+| `facets` | 이번 결과에 실제로 있는 제조사 · 모델 · 용량 · 색상 (체크하기 전 기준). `FacetOption = { value, label, count }` — `value`는 다시 보낼 값(모델은 `iphone\|17 pro`, 용량은 GB 숫자 `256`), `count`는 그 값을 가진 상품 수. 칸끼리는 AND, 한 칸 안은 OR. 색상을 고르면 그 색상 판매처만 남고 가격도 그 기준 |
+
+**정렬** (`price_asc`)
+1. 가격이 하나도 없는 상품(전부 이상 가격 · 조회 불가 · 품절)은 맨 아래.
+2. **검색어와 맞는 정도**: 검색어에서 모델을 알아내면(아이폰 · 갤럭시 · 픽셀 · 맥북 · 아이패드) 같은 모델 + 같은 용량 → 같은 모델 다른 용량 순으로 맨 위. 나머지는 단어 점수 순 (포함률 · 군더더기 · 검색어에 없는 모델 구분 말(Pro · Max · Flip · e …) 하나당 −0.3 · 다른 세대 −0.2, 0.1 단위로 끊음).
+3. 같은 단계 안에서는 모델 묶음별 최저가 순 → 모델 · 용량 순 (256 → 512 → 1TB).
+4. 그다음 예상 구매비용 오름차순 → `shipDays` 짧은 순 → 쇼핑몰 이름.
+
+`discount_desc`는 할인율 높은 순이고 관련도 정렬은 쓰지 않는다.
 
 **검색어 처리**
-- 앞뒤 공백 제거, 연속 공백 1개로, 길이 검증.
-- **한영 별칭 변환**: `src/main/resources/aliases.csv`(`아이폰,iphone` 형식)를 읽어 한글 단어를 영어로 바꾼 검색어를 소스에 보낸다. 사전에 없는 한글은 그대로 보낸다. 초기 항목: 아이폰, 갤럭시, 맥북, 아이패드, 에어팟, 삼성, 애플, 노트북, 태블릿 등.
-- **걸러내기 (`ResultFilter`)**: 새 상품이 아닌 것(`used`, `refurbished`, `renewed`, `for parts`, 중고, 리퍼), 액세서리·부품(`case`, `cover`, `protector`, `charger`, `cable`, `screen protector`, `케이스`, `필름` 등 제외 키워드. `for iPhone` 형태 포함). 키워드 목록은 설정 파일로 둔다.
+- 공백 정리 → `src/main/resources/aliases.csv`로 한글 단어를 영어로 (사전 단어 뒤에 숫자 · 영문이 붙으면 나눔: 갤럭시s25 → galaxy s25). 사전에 없는 한글은 그대로.
+- **걸러내기** (`ResultFilter`, 키워드는 `application.yml`의 `globalprice.filter`). 검색어에 같은 키워드가 있으면(예: "iphone case") 거르지 않는다. 영문 키워드는 단어 경계 + 복수형(cases, covers)까지.
+  - 새 상품 아님: used · pre-owned · refurbished · renewed · for parts · as-is · open box · 중고 · 리퍼 등
+  - 액세서리 · 부품: case · cover · protector · charger · cable · stand · mount · pouch · repair · keycap · band 등 약 80개 (영 · 독 · 프 · 스페인어 · 한글)
+  - 박스만 파는 리스팅 ("box only", "empty box", "박스만")
+  - 시계를 검색했는데 밴드 · 루프 · 스트랩만 파는 리스팅
+  - 미국 통신사 잠김 폰 (AT&T · Verizon · T-Mobile 등, "Unlocked"가 같이 있으면 통과)
+  - "for iPhone" 같은 호환 표기, 검색어 첫 단어(브랜드) 앞에 for · compatible with · fits가 붙은 표기 ("Stand for Sony ...")
 
-### 6-3. GET /api/products/{id} — 상세
-
-`coupon=true` 쿼리 지원. 인증 불필요.
-
-- 저장된 값으로 응답하되, **쇼핑몰 API로 단건 갱신을 시도**(타임아웃 3초)하고 성공하면 가격을 갱신해 쓴다. 실패하면 저장된 값을 쓰고 `priceStatus: "stale"`과 `fetchedAt`을 내린다 (`ok`: 6시간 이내, `stale`: 초과, `unavailable`: 품절 · 조회 불가).
-- 응답: 검색의 `items[]` 한 건과 같은 모양 + `description`, `variants[]`(옵션이 여러 개면 옵션별 `variantName` · 가격 · breakdown).
-- 오류: 404 `PRODUCT_NOT_FOUND`.
-
-### 6-4. GET /api/products/{id}/price-history
-
-`period=1m|3m|6m|1y`(기본 1m, 그 외 400). `price_history`를 **날짜별 최저 `total_amount_krw`** 로 묶는다. `total_amount_krw`가 null인 행은 제외.
-
+**ProductSummary** (검색 · 찜 목록의 상품 1건)
 ```json
-{ "productId": 101, "period": "3m",
-  "points": [ { "date": "2026-10-01", "lowestTotalKrw": 1230000 } ],
-  "summary": { "minKrw": 1187256, "avgKrw": 1215000, "maxKrw": 1254855 } }
+{ "id": 61, "name": "Apple iPhone 17 256GB", "spec": null, "brand": null, "model": null, "imageUrl": "https://...",
+  "categoryName": "", "rating": null, "reviewCount": null, "popularity": null,
+  "badges": ["행사 진행 중"], "offerCount": 12, "bestTotal": 1230060, "bestNormalTotal": 1265000, "bestStore": "eBay US",
+  "offers": [ Offer ],
+  "colors": [ { "name": "Lavender", "bestTotal": 1230060, "offerCount": 3 } ] }
+```
+- `name`: 묶인 상품의 대표 이름 (4-5). 판매처 줄의 원래 이름은 `offers[].title`.
+- `offers`: 비교 대상 → 품절 → 이상 가격 → 조회 불가 순, 상위 3개. `offerCount`는 전체 판매처 수.
+- `colors`: 색상별 최저가 (비교 가능한 판매처 기준, 싼 색상부터). 색상이 2개 이상일 때만, 아니면 빈 배열.
+- `rating` · `reviewCount` · `popularity`는 항상 null (DB에 없음, 화면에서 숨김).
+
+**Offer** (판매처 옵션 1건 = `mall_product_variants` 1행)
+```json
+{ "mallProductId": 1, "mallVariantId": 1, "mallId": 1, "storeId": "ebay", "storeName": "eBay US",
+  "countryName": "미국", "countryCode": "US", "variantName": null, "stockStatus": "IN_STOCK",
+  "status": "ok", "calculatedAt": "2026-11-22T16:04:20", "updatedAt": "2026-11-22T16:04:20", "fetchedAt": "2026-11-22T16:04:20",
+  "currency": "USD", "price": 799.00, "shipping": 15.00, "shippingNote": null,
+  "url": "https://...", "imageUrl": "https://...",
+  "title": "Apple iPhone 17 256GB Lavender Unlocked", "seller": null, "color": "Lavender",
+  "appliedEvent": { "storeEventId": 1, "eventName": "...", "eventType": "COUPON", "discountType": "RATE",
+                    "discountValue": 0.10, "maxDiscountAmount": 50.00, "discountAmount": 50.00 },
+  "taxIncluded": false, "shipDays": null, "deliveryDays": null,
+  "calc": { "productPriceKrw": 1118600, "shippingFeeKrw": 21000, "discountAmountKrw": 70000,
+            "customsDutyKrw": 0, "vatKrw": 106960, "paymentFeeKrw": 10696, "totalAmountKrw": 1187256,
+            "taxed": true, "taxExempt": false, "exemptionUsd": 200, "shippingKnown": true },
+  "total": 1187256, "totalNormal": 1264956,
+  "exchangeRate": { "currencyCode": "USD", "rateToKrw": 1400, "baseDate": "2026-11-20" } }
 ```
 
-### 6-5. GET /api/exchange-rates
+| 필드 | 설명 |
+| --- | --- |
+| `storeId` | 소스 키 (`ebay` 등). `stores` 파라미터 값과 같음 |
+| `countryCode` · `countryName` | 출발국 (5장 규칙). "원화 결제"는 국내 직구관(KR 쇼핑몰 + KRW)만, 유로는 "유럽(유로)" |
+| `status` | `ok`(이번 갱신 성공 또는 6시간 이내) · `stale`(갱신 실패, 6시간 초과 → 화면 "N시간 전 가격") · `unavailable`(환율 없음 → `price` · `calc` · `total` null, "일시적으로 조회 불가") · `suspicious`(이상 가격, 4-6 → "이상 가격 · 비교 제외"). `ok` 외에는 최저가 · 비교에서 빠짐 |
+| `stockStatus` | `IN_STOCK` · `OUT_OF_STOCK` · `UNKNOWN`. 품절은 "품절" 표시, 최저가에서 빠짐 |
+| `price` · `shipping` | 쇼핑몰 통화. 배송비는 상품별 값 > `shipping_rules`, 모르면 null + `calc.shippingKnown=false` |
+| `title` | 쇼핑몰 원래 상품명 (`mall_products.listing_title`) |
+| `seller` | 상품 링크 도메인 (예 `techdealz.com`). Shopify처럼 한 플랫폼에 상점이 여러 곳일 때만, 쇼핑몰 자체 도메인이면 null |
+| `color` | 상품명에서 찾은 색상 (영문 대표 이름). 없거나 여러 색이면 null |
+| `appliedEvent` | 적용된 행사. 없으면 null. `discountAmount`는 쇼핑몰 통화 할인액 |
+| `calc.taxed` · `taxExempt` · `exemptionUsd` | 과세 여부 · 면세 여부 · 적용한 면세 한도 |
+| `total` · `totalNormal` | 예상 구매비용 · 행사 · 쿠폰 없이 계산한 값(취소선) |
+| `taxIncluded` · `shipDays` · `deliveryDays` · `shippingNote` | 1차에는 값 없음 (화면에서 숨김) |
 
-통화별 최신 `base_date` 1건: `{ items: [{ currencyCode, rateToKrw, ttsRate, baseDate, recordedAt }] }`. 대상 통화는 USD · JPY · EUR(+ 소스가 쓰는 통화). 데이터가 없으면 503.
+### 6-3. 상품 상세 — `GET /api/products/{id}?coupon=true` (인증 불필요)
 
-### 6-6. GET /api/home
+저장값으로 응답하되, 소스가 있는 판매처는 쇼핑몰 API로 단건 갱신을 시도한다 (3초). 판매처가 많으면 **가장 오래전에 받은 것부터 최대 6곳**만 갱신하고 나머지는 저장값 + stale 표시.
 
-`{ categories: [...], monthlyEvents: [...] }` — `store_events` 중 `is_active`이고 이번 달과 기간이 겹치는 것. 인기 상품은 1차에서 제외 (프론트 `API_SPEC.md`에 있으면 빈 배열로 응답).
+```json
+{ "id": 61, "name": "...", "brand": null, "model": null, "spec": null, "description": null, "imageUrl": "...",
+  "categoryName": "", "rating": null, "reviewCount": null,
+  "badges": ["행사 진행 중", "최근 30일 최저"], "bestTotal": 1230060, "bestNormalTotal": 1265000, "bestStore": "eBay US",
+  "offerCount": 14, "offers": [ Offer ], "variants": [ Offer ], "events": [ Event ],
+  "rates": { "base": "KRW", "source": "한국수출입은행", "baseDate": "2026-11-20", "updatedAt": "...", "rates": { "USD": 1400 } },
+  "priceStatus": "ok", "fetchedAt": "2026-11-22T16:04:20", "wished": false,
+  "configs": [ { "productId": 61, "label": "256GB", "bestTotal": 1230060, "offerCount": 14, "storageGb": 256, "current": true } ] }
+```
+- `offers` · `variants`: 전체 판매처 (같은 내용).
+- `priceStatus`: `ok` · `stale` · `unavailable`. `wished`: 로그인 시 찜 여부, 아니면 null.
+- `events`: 그 상품 판매처의 활성 · 진행 중 · 예정 행사.
+- `configs`: 같은 모델의 다른 구성(용량 · 메모리 · 통신 방식, 4-5). `current`는 지금 보는 상품, `storageGb`는 GB당 가격 계산용. 구성이 하나뿐이거나 모르는 상품이면 빈 배열. 다른 구성 최저가는 판매처 1~2곳 상품의 이상 가격 판정 기준에도 쓴다.
+- 상단 "사이트별 가격 한눈에" 그래프는 `offers[].calc`로 그린다 (별도 API 없음).
+- 오류: 404 `PRODUCT_NOT_FOUND`.
 
-### 6-7. 인증
+### 6-4. 가격 변동 이력 — `GET /api/products/{id}/price-history?period=3m`
+
+`period` = `1m` · `3m` · `6m` · `1y` (기본 1m, 그 외 400). 날짜별 최저 `total_amount_krw` (null 제외). 묶인 상품은 모든 판매처 중 최저.
+
+```json
+{ "productId": 61, "period": "3m",
+  "points": [ { "date": "2026-10-01", "lowest": 1230000, "lowestWithCoupon": 1230000, "lowestTotalKrw": 1230000 } ],
+  "summary": { "minKrw": 1187256, "avgKrw": 1215000, "maxKrw": 1254855 } }
+```
+이력은 쿠폰을 뺀 값만 저장하므로 `lowestWithCoupon`은 `lowest`와 같다 (프론트 그래프 호환용).
+
+### 6-5. 환율 — `GET /api/exchange-rates`
+
+```json
+{ "base": "KRW", "source": "한국수출입은행", "baseDate": "2026-11-20", "updatedAt": "2026-11-22T16:04:14",
+  "rates": { "USD": 1400, "JPY": 9.5, "EUR": 1474.21 },
+  "items": [ { "currencyCode": "USD", "rateToKrw": 1400, "ttsRate": 1413.7, "baseDate": "2026-11-20", "recordedAt": "..." } ] }
+```
+통화별 최신 `base_date` 1건. JPY · IDR은 1단위 기준 (화면은 100엔 기준으로 표시). 데이터가 하나도 없으면 503.
+
+### 6-6. 홈 — `GET /api/home`
+
+```json
+{ "categories": ["스마트폰", "노트북"], "hotKeywords": ["아이폰", "갤럭시", "맥북", "에어팟", "무선 헤드폰"],
+  "events": [ Event ], "monthlyEvents": [ Event ], "popular": [] }
+```
+- 홈 행사 = 활성이고 이번 달과 기간이 겹치는 `store_events`. `hotKeywords`는 설정값(`globalprice.home.hot-keywords`).
+- **Event** = `{ id, storeEventId, storeId, mallId, storeName, name, eventType, start, end, startAt, endAt, benefit, discountType, discountValue, minPurchaseAmount, maxDiscountAmount, url, mark, tag }`. `start` · `end`는 날짜(일정 미정이면 null → 화면 "[일정 확인]"), `benefit` ← `description`, `mark` · `tag`는 화면용.
+
+### 6-7. 회원
 
 | 메서드 · 주소 | 요청 | 성공 | 오류 |
 | --- | --- | --- | --- |
-| POST /api/auth/signup | `email`, `nickname`, `password` | 201 `{userId,email,nickname,createdAt}` | 400, 409 DUPLICATE_EMAIL |
-| POST /api/auth/login | `email`, `password` | 200 `{userId,email,nickname}` + 세션 쿠키 | 400, 401 LOGIN_FAILED |
-| GET /api/auth/me | — | 200 | 401 |
-| POST /api/auth/logout | — | 204 | 401 |
+| POST `/api/auth/signup` | `email`, `nickname`(≤50), `password`(8~72) | 201 `{userId, email, nickname, createdAt}` | 400, 409 |
+| POST `/api/auth/login` | `email`, `password` | 200 `{userId, email, nickname, createdAt}` + `Set-Cookie: JSESSIONID` | 400, 401 `LOGIN_FAILED` |
+| GET `/api/auth/me` | — | 200 (위와 같은 모양) | 401 `LOGIN_REQUIRED` |
+| POST `/api/auth/logout` | — | 204 (세션 무효화) | 401 |
 
-BCrypt, 로그인 성공 시 `request.changeSessionId()`, 세션 30분, 쿠키 HttpOnly · SameSite=Lax. 비밀번호는 응답 · 로그에 절대 포함하지 않는다. 비밀번호 최소 8자 **[결정]**.
+BCrypt, 로그인 성공 시 세션 ID 재발급(`request.changeSessionId()`), 세션 30분, 쿠키 HttpOnly · SameSite=Lax. 이메일은 소문자로 저장. 존재하지 않는 이메일도 BCrypt 비교를 한 번 해서 응답 시간으로 가입 여부가 드러나지 않게 한다.
 
 ### 6-8. 관심 상품 (로그인 필요)
 
 | 메서드 · 주소 | 요청 | 성공 |
 | --- | --- | --- |
-| GET /api/wishlist | — | 200 `{items:[{wishlistId, productId, productName, imageUrl, lowestTotalKrw, createdAt}]}` |
-| POST /api/wishlist | `{productId}` | 201 (이미 있으면 200으로 기존 항목, 멱등) |
-| DELETE /api/wishlist/{productId} | — | 204 |
+| GET `/api/wishlist` | — | 200 배열 `[ ProductSummary + {wishlistId, productId, productName, lowestTotalKrw, createdAt} ]` |
+| POST `/api/wishlist` | `{productId}` | 201 새로 추가 / 200 이미 있음 (멱등) |
+| DELETE `/api/wishlist/{productId}` | — | 204 (없어도 204) |
 
-찜 목록의 가격은 저장된 최신값 기준으로 계산한다 (외부 호출 없음).
+찜 목록 가격은 저장된 최신값으로 계산한다 (외부 호출 없음). 묶기로 상품이 합쳐지면 찜은 합쳐진 상품으로 옮겨진다.
 
 ### 6-9. 가격 알림 (로그인 필요)
 
-| alertBasis | 구분 | productId | storeEventId | targetPriceKrw |
-| --- | --- | --- | --- | --- |
-| TARGET_PRICE | 필수 | 필수 | 없음 | 필수 (0 초과) |
-| PERIOD_LOWEST | 필수 | 필수 | 없음 | 없음 |
-| EVENT_START | 선택 | 없음 | 필수 | 없음 |
-| COUPON_EXPIRY | 선택 | 없음 | 필수 | 없음 |
-
-(DB `chk_alert_target`과 동일. 위반은 400)
-
 | 메서드 · 주소 | 요청 | 성공 |
 | --- | --- | --- |
-| GET /api/alerts | — | 200 `{items:[alert]}` |
-| POST /api/alerts | `{alertBasis, productId?, storeEventId?, targetPriceKrw?}` | 201 (같은 조건이 있으면 UPDATE 후 200) |
-| DELETE /api/alerts/{alertId} | — | 204 (남의 것이면 404) |
+| GET `/api/alerts` | — | 200 배열 `[ {alertId, alertBasis, productId, productName, storeEventId, eventName, targetPriceKrw, isActive, lastNotifiedAt, createdAt} ]` |
+| POST `/api/alerts` | `{alertBasis, productId?, storeEventId?, targetPriceKrw?}` | 201 새로 / 200 같은 조건이면 목표가 UPDATE |
+| DELETE `/api/alerts/{alertId}` | — | 204, 남의 것이면 404 |
+
+| alertBasis | productId | storeEventId | targetPriceKrw | 프론트에서 만드는 곳 |
+| --- | --- | --- | --- | --- |
+| TARGET_PRICE | 필수 | 없음 | 필수 (0 초과) | 상세 "목표가 알림" |
+| PERIOD_LOWEST | 필수 | 없음 | 없음 | 상세 "최근 30일 최저가 알림" |
+| EVENT_START | 없음 | 필수 | 없음 | 홈 · 상세 행사 |
+| COUPON_EXPIRY | 없음 | 필수 | 없음 | 홈 · 상세 행사 |
+
+DB `chk_alert_target`과 같은 조합. 어기면 400.
 
 ### 6-10. 받은 알림 (로그인 필요)
 
-- `GET /api/notifications?unread=true&page=&size=` → `{ unreadCount, items:[{notificationId, alertId, alertBasis, message, productId, storeEventId, sentAt, readAt}], page... }`. `unreadCount`는 페이지와 무관한 전체 안 읽은 수.
+- `GET /api/notifications?unread=true&page=&size=` → `{ unreadCount, items: [ {notificationId, alertId, alertBasis, message, productId, storeEventId, sentAt, readAt} ], page, size, totalElements, totalPages }`. `unreadCount`는 페이지와 무관한 전체 안 읽은 수.
 - `PATCH /api/notifications/{id}/read` → 200 `{notificationId, readAt}` (이미 읽었으면 `readAt` 유지, 남의 것이면 404).
 
 ---
@@ -442,157 +504,147 @@ BCrypt, 로그인 성공 시 `request.changeSessionId()`, 세션 30분, 쿠키 H
 
 ### 7-1. 환율 (한국수출입은행)
 
-- `GET https://oapi.koreaexim.go.kr/site/program/financial/exchangeJSON?authkey={키}&searchdate={YYYYMMDD}&data=AP01` **[확인: 경로 · 응답 필드]**
-- 사용 필드: `cur_unit`, `deal_bas_r`(매매기준율), `tts`(전신환매도율). **숫자 값에 쉼표가 들어 있을 수 있다**(`"1,380.5"`) → 쉼표 제거 후 파싱.
-- `JPY(100)`, `IDR(100)` 등은 100으로 나눠 1단위 기준으로 저장 (`rate_to_krw`는 소수 6자리).
-- `(currency_code, base_date)`로 upsert. 주말 · 공휴일 · 오전 11시 이전에는 빈 결과가 오므로 이 경우 저장하지 않고 **가장 최근 `base_date` 값을 계속 쓴다**. 11:30에 빈 결과면 15:00에 한 번 더 시도.
-- 환율을 한 번도 못 받은 통화가 있으면 그 통화의 offer는 계산에서 제외(`unavailable`).
+- `GET {url}?authkey=&searchdate=YYYYMMDD&data=AP01`. 사용 필드 `cur_unit` · `deal_bas_r` · `tts`. 숫자의 쉼표 제거, `JPY(100)` · `IDR(100)`은 100으로 나눔(소수 6자리), KRW 제외.
+- `result` 1 성공 · 3 인증키 오류 · 4 일일 제한 초과. 빈 배열(주말 · 공휴일 · 11시 이전)이면 저장하지 않고 최근 값을 계속 사용.
+- `(currency_code, base_date)` upsert. 환율을 한 번도 못 받은 통화의 상품은 계산에서 제외.
+- 서버 시작 시 오늘 값이 없으면 하루씩 거슬러(최대 7일) 최근 영업일 값을 받는다 (주말에 켜도 금요일 값). 이미 있으면 호출 안 함.
 
 ### 7-2. 관심 상품 가격 갱신 (6시간마다)
 
-1. 찜 또는 활성 알림이 걸린 `product_id`의 `mall_products`를 소스별로 모은다 (`last_fetched_at` 오래된 순).
-2. 소스별로 `refresh(externalIds)` 호출 (소스가 지원하는 만큼 배치: Shopify `lookup_catalog` 최대 50, AliExpress `product_ids` 콤마 목록, eBay · Etsy는 단건).
-3. 가격 · 재고 upsert → `price_history` 기록 → 5장 계산(쿠폰 제외) → 알림 판정.
-4. 한 건 실패는 건너뛰고 나머지를 계속. 소스 단위로 `api_sync_logs` 1행 기록.
+1. 찜 또는 활성 알림이 걸린 상품을 모으고, 갱신 전에 상품별 최근 30일 최저가를 먼저 구한다.
+2. 쇼핑몰별로 `refresh` 호출 (배치: Shopify 50 · AliExpress 20 · Etsy 100 · eBay 1). 5xx · 타임아웃은 1 · 2 · 4초 재시도, 401 · 429는 그 소스 중단.
+3. 저장 → 가격 이력 → 계산(쿠폰 제외, 품절 제외) → 알림 판정. 한 건 실패는 건너뛰고 소스 단위로 `api_sync_logs` 1행.
+
+저장 시각은 초 단위로 맞춘다 (DB DATETIME 반올림 때문에 방금 쓴 이력이 "갱신 전 30일 최저"에 섞여 PERIOD_LOWEST 알림이 누락되던 문제 해결).
 
 ### 7-3. 알림 판정
 
 | alertBasis | 조건 |
 | --- | --- |
-| TARGET_PRICE | 상품의 현재 예상 구매비용 ≤ `target_price_krw` (품절 제외) |
-| PERIOD_LOWEST | 현재 예상 구매비용이 최근 30일 `price_history` 최저보다 낮음 |
-| EVENT_START | 행사 `start_at` 날짜가 오늘(KST)이고 `is_active` |
-| COUPON_EXPIRY | 쿠폰 `end_at` 날짜가 내일(KST) |
+| TARGET_PRICE | 현재 예상 구매비용(쿠폰 제외 · 품절 제외 최저) ≤ `target_price_krw` |
+| PERIOD_LOWEST | 현재 예상 구매비용 < 갱신 전 최근 30일 `price_history` 최저 |
+| EVENT_START | 행사 `start_at` 날짜가 오늘(KST)이고 활성 |
+| COUPON_EXPIRY | COUPON 행사의 `end_at` 날짜가 내일(KST) |
 
-- 같은 알림은 하루 1회: `last_notified_at`의 날짜가 오늘이면 건너뜀.
-- 조건을 만족하면 `notifications`에 메시지를 저장하고 `last_notified_at`을 갱신 (한 트랜잭션).
-- EVENT_START · COUPON_EXPIRY는 선택 기능이므로 구현 순서에서 가장 마지막에 한다.
+같은 알림은 하루 1회 (`last_notified_at` 날짜가 오늘이면 건너뜀). `notifications` 저장과 `last_notified_at` 갱신은 한 트랜잭션.
 
 ---
 
-## 8. 설정 (`application.yml` 뼈대)
+## 8. 설정과 환경 변수
 
-```yaml
-spring:
-  threads:
-    virtual:
-      enabled: true
-  jpa:
-    hibernate:
-      ddl-auto: none
-    open-in-view: false
-  datasource:
-    url: jdbc:mysql://localhost:3306/globalprice?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
-    username: ${DB_USER}
-    password: ${DB_PASSWORD}
-server:
-  servlet:
-    session:
-      timeout: 30m
-      cookie:
-        http-only: true
-        same-site: lax
-globalprice:
-  search:
-    per-source-limit: 20
-    cache-ttl: 10m
-    connect-timeout: 2s
-    read-timeout: 3s
-  sources:
-    ebay:       { enabled: true,  client-id: ${EBAY_CLIENT_ID}, client-secret: ${EBAY_CLIENT_SECRET}, sandbox: true, daily-budget: 3000 }
-    shopify:    { enabled: true,  agent-profile: https://shopify.dev/ucp/agent-profiles/2026-04-08/valid-with-capabilities.json, daily-budget: 3000 }
-    aliexpress: { enabled: false, app-key: ${ALI_APP_KEY}, app-secret: ${ALI_APP_SECRET}, tracking-id: ${ALI_TRACKING_ID}, daily-budget: 3000 }
-    etsy:       { enabled: false, api-key: ${ETSY_API_KEY}, daily-budget: 3000 }
-    koreaexim:  { auth-key: ${KOREAEXIM_KEY} }
-```
+| 환경 변수 | 용도 | 없으면 |
+| --- | --- | --- |
+| `DB_URL` · `DB_USER` · `DB_PASSWORD` | MySQL 접속 | `localhost:3306/globalprice` · `root` · 빈 값 |
+| `EBAY_CLIENT_ID` · `EBAY_CLIENT_SECRET` | eBay App ID · Cert ID | eBay skipped |
+| `EBAY_SANDBOX` | `true`면 샌드박스 (한국 배송 상품 없음) | `true` → 실사용은 `false` |
+| `SHOPIFY_AGENT_PROFILE` | Shopify 에이전트 프로필 URL | 예시 프로필 |
+| `ETSY_API_KEY` | `keystring:shared_secret` | Etsy skipped |
+| `ALI_APP_KEY` · `ALI_APP_SECRET` · `ALI_TRACKING_ID` | AliExpress 제휴 (tracking_id 선택) | AliExpress skipped |
+| `KOREAEXIM_KEY` | 수출입은행 인증키 | 환율 수집 안 함 |
+| `EBAY_ENABLED` · `SHOPIFY_ENABLED` · `ALI_ENABLED` · `ETSY_ENABLED` | 쇼핑몰 끄기 (`false`) | 모두 켜짐 |
 
-- `enabled: false`인 소스는 키가 없어도 앱이 기동돼야 한다 (키는 `enabled=true`일 때만 필수).
-- `daily-budget` 숫자는 시작값이다. 실제 한도는 각 공식 문서로 **[확인]** 후 조정.
-- 시각은 모두 `Asia/Seoul`. `Clock` 빈을 주입해 시간에 의존하는 코드를 테스트할 수 있게 한다.
+키 · DB 비밀번호는 OS 사용자 환경 변수로 한 번 등록한다 (Windows: PowerShell `[Environment]::SetEnvironmentVariable("이름", "값", "User")`, Mac: `~/.zshrc`에 `export`). 등록 후 열려 있던 터미널 · IDE는 다시 켠다.
+
+그 밖의 값은 `application.yml`의 `globalprice.*`: 소스당 가져올 개수 20, 캐시 10분 · 500건, 타임아웃(연결 2초 · 읽기 3초 · 상세 갱신 3초), 429 쉬기 10분, stale 기준 6시간, 하루 예산 3,000, 걸러내기 키워드, 홈 인기 검색어, 수수료 규칙 이름.
 
 ---
 
 ## 9. 보안
 
-- HTTPS는 Nginx(:443)가 처리, Spring Boot(:8080)는 내부에서만. MySQL(:3306)은 외부 차단.
-- 비밀번호 BCrypt, 로그인 시 세션 ID 재발급, 쿠키 HttpOnly · SameSite=Lax.
-- 남의 찜 · 알림 · 알림 내역에 접근하면 404 (존재 여부를 숨김).
-- 외부 응답의 문자열(제목 등)은 그대로 응답에 담되 서버에서 HTML로 렌더링하지 않는다 (프론트가 이스케이프).
-- 로그에 API 키 · 서명 · Authorization · 세션 ID를 남기지 않는다.
+- API 키 · 시크릿은 환경 변수로만. 로그 · 오류 메시지에 키 · 토큰 · 서명 · Authorization · 세션 ID를 남기지 않음 (외부 오류 메시지에 URL · 응답 본문도 넣지 않음).
+- 키 전달용 파일(`api_key.txt` 등)은 `.gitignore`로 제외돼 있으며, 저장소 · 압축 파일에 넣지 말고 따로 전달한다.
+- 비밀번호 BCrypt, 응답 · 로그에 미포함 (요청 객체 `toString`도 가림). 로그인 시 세션 ID 재발급, 쿠키 HttpOnly · SameSite=Lax.
+- 남의 찜 · 알림 · 받은 알림에 접근하면 404.
+- 외부 응답 문자열(상품명 등)은 그대로 내려주고 서버에서 HTML로 렌더링하지 않음 (프론트가 이스케이프).
+- 운영: HTTPS는 Nginx(:443), Spring Boot(:8080)는 내부에서만, MySQL(:3306)은 외부 차단.
 
 ---
 
-## 10. 테스트 계획
+## 10. 테스트
+
+```
+gradlew.bat test                 # 단위 테스트 (통합은 DB 가 없으면 건너뜀)
+# 통합 테스트: Docker 가 켜져 있으면 Testcontainers(mysql:8.0) 자동,
+# 또는 01~07 스크립트를 적용한 테스트 전용 DB 를 지정 (개발 DB 를 쓰지 말 것)
+set GP_TEST_DB_URL=jdbc:mysql://127.0.0.1:3306/globalprice?serverTimezone=Asia/Seoul
+gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 --rerun
+```
 
 | 구분 | 내용 |
 | --- | --- |
-| PriceCalculator | 5장의 단위 테스트 전부 |
-| 소스 어댑터 | MockWebServer로 정상 JSON(실제 샘플 응답을 파일로 저장), 429, 503, 5초 지연, 401, 깨진 JSON, 값 누락. Shopify는 JSON · SSE 둘 다. AliExpress는 서명 단위 테스트 |
-| 검색 서비스 | 가짜 소스 3개로: 일부 타임아웃 시 200 + `sources`, 전부 실패 시 503, 캐시 히트 시 외부 호출 0회, 걸러내기 · 정렬 · 필터 |
-| 저장 | `(mall_id, external_product_id)` upsert 멱등, `price_history` 중복 방지 |
-| API 통합 | `@SpringBootTest` + Testcontainers MySQL 8 (CHECK · 함수형 UNIQUE가 있어서 H2 불가) |
-| 알림 | 시드 알림 + 가짜 가격으로 판정 · 하루 1회 제한 |
-| 부하 | k6 (선택): 캐시 히트 검색 p95 1초 이내 |
+| PriceCalculator | 5장의 모든 경계 · 시드 기준 금액 (면세 한도 경계, 정률 할인 상한, 최소 구매금액 미달, 정액 할인, 할인 > 상품가, 1만원 미만 세금, 무료배송 경계, 원화 결제, 배송비 모름, JPY · IDR, 규칙 우선순위, 반올림 경계, 전신환매도율) |
+| 소스 어댑터 | 가짜 서버로 정상 · 429 · 503 · 지연 · 401 · 깨진 JSON · 값 누락. 실제 응답 샘플(`src/test/resources/samples`), Shopify JSON · SSE, AliExpress 서명 · tracking_id 유무 · 출발국 CN, 수출입은행 파싱 |
+| 환율 서비스 | 주말이면 직전 영업일, 이미 최신이면 호출 없음, 키 없음 · 인증 오류면 중단 |
+| 묶기 · 출발국 · 이상 가격 · 색상 · 모델코드 | `ProductMatcherTest` · `OriginTest` · `PriceOutliersTest` · `ColorNameTest` · `ModelCodeTest` · `SameProductGrouperTest` |
+| 검색 서비스 | 가짜 소스 3개: 일부 실패 200, 전부 실패 503 · 502, 캐시 히트 시 외부 호출 0회, 걸러내기 · 정렬 · 필터 · 페이지 · 예산 · 쿨다운, 관련도(`RelevanceTest`), 체크표(`FacetTest`) |
+| 통합 (실제 MySQL) | API 전체 흐름, 시드 금액, 저장 멱등 · 이력 중복 방지, stale 표시, 관심 상품 갱신 → 알림 · 하루 1회, 행사 알림 |
+
+현재 126개 (통합 9개는 DB 없으면 건너뜀). **실패 1개**: `SearchServiceTest.partialFailure_returns200WithSourceStatuses` — 관련도 정렬 도입 후 순서 기대값을 고치지 않음 (13장 기본 정렬 결정 후 정리).
 
 ---
 
-## 11. DB 변경 · 시드
+## 11. DB 스크립트 · 실행 순서
 
-### 마이그레이션 `03_migration_001.sql` (기존 스크립트는 건드리지 않는다)
+`GlobalPrice_DB/GlobalPrice_DB` 폴더. MySQL 8.0.16 이상 (CHECK · 함수형 UNIQUE 때문에 H2 · MariaDB 불가). 모든 마이그레이션은 이미 적용돼 있으면 건너뛰어 여러 번 실행해도 안전하다.
 
-```sql
--- 전신환매도율 (결제 금액 계산용)
-ALTER TABLE exchange_rates
-  ADD COLUMN tts_rate DECIMAL(18,6) NULL AFTER rate_to_krw;
-```
+| 순서 | 스크립트 | 내용 |
+| --- | --- | --- |
+| 1 | `01_create_database.sql` · `02_create_tables.sql` | 기준 스키마 19개 테이블 (수정하지 않음, 변경은 마이그레이션으로) |
+| 2 | `03_seed_data.sql` | 테스트 데이터 (Amazon US · Rakuten, 시드 기준 금액). **06보다 먼저** (컬럼 이름 없이 INSERT) |
+| 3 | `03_migration_001.sql` | `exchange_rates.tts_rate` 추가 |
+| 4 | `04_seed_dev.sql` | 쇼핑몰 5개 · api_sources 6개 · 배송 규칙 · 세금 규칙(기본 $150 · 미국 $200, 관세 0% · 부가세 10%) · 수수료 1% · 테스트 행사 |
+| 5 | `05_migration_002.sql` | `search_aliases` 테이블 + 별칭 데이터 (백엔드는 아직 `aliases.csv` 사용) |
+| 6 | `06_migration_003.sql` | `mall_product_variants.normalized_option_key` (백엔드 미사용) |
+| 7 | `07_migration_004.sql` | **필수** — `products.match_key`(UNIQUE) · `mall_products.listing_title`. 없으면 검색 · 상세가 실패 |
+| (선택) | `90_demo_price_history.sql` | 시연용 가짜 가격 이력 1년치. 운영 DB 금지. 지우기: `DELETE FROM price_history WHERE TIME(recorded_at) = '04:44:44'` |
 
-- 이미 컬럼이 있는지 확인하는 방식으로 재실행해도 안전하게 만든다. 적용 전에 기존 DB를 임의로 지우거나 재생성하지 않는다.
+---
 
-### 시드 (개발용, 별도 `04_seed_*.sql`)
+## 12. 구현 상태
 
-| 테이블 | 값 |
+| 단계 | 내용 | 상태 |
+| --- | --- | --- |
+| 1 | 골격 · DB 연결 · 오류 처리 · 세션 · 설정 | 완료 |
+| 2 | 환율 수집 · 조회 | 완료 (실제 키) |
+| 3 | PriceCalculator + 단위 테스트 | 완료 |
+| 4 | MallSource + eBay + 저장 규칙 | 완료 (운영 키) |
+| 5 | 검색 API (별칭 · 걸러내기 · 동시 호출 · 캐시 · 계산 · 정렬) | 완료 |
+| 6 | 상세 · 가격 이력 · 단건 갱신 | 완료 |
+| 7 | 회원 · 관심 상품 | 완료 |
+| 8 | 관심 상품 갱신 스케줄러 · 알림 판정 · 받은 알림 | 완료 |
+| 9 · 10 · 11 | Shopify · AliExpress · Etsy | 완료 (실제 확인) |
+| 12 | EVENT_START · COUPON_EXPIRY 알림 | 완료 |
+| 13 | 같은 상품 묶기 · 다른 구성 · 체크표 · 색상별 최저가 · 이상 가격 · 관련도 정렬 | 완료 (11/18~) |
+| + | 프론트 연결 (static 복사본 `USE_MOCK=false`) | 완료 |
+
+---
+
+## 13. 팀 확정 · 남은 일
+
+| # | 항목 | 현재 상태 · 가정 |
+| --- | --- | --- |
+| 1 | 기본 정렬 | 관련도 → 가격순 (6-2). 순수 가격순으로 할지 확정 필요. 정해지면 실패 테스트 1개 정리 |
+| 2 | 묶기 기준 이원화 | 백엔드는 `match_key`(07). DB 쪽 `search_aliases`(05) · `normalized_option_key`(06)는 `(brand_id, model_number)` 기준으로 설계됐지만 백엔드가 안 씀. 하나로 정할 것. 별칭도 `aliases.csv`와 `search_aliases`가 따로 관리됨 (csv에만 11/18 추가분 19개) |
+| 3 | AliExpress tracking_id | 없음 → 구매 링크가 제휴 링크 대신 상품 페이지. AliExpress Portals 에서 발급 필요 |
+| 4 | 검색 품질 | AliExpress 브랜드명 검색에 무관 상품, 키워드 걸러내기의 한계 (이름에 표시 없는 케이스 · 부품). 판매처 1곳뿐인 상품은 이상 가격을 못 잡을 수 있음 |
+| 5 | 결제 수수료율 | 시드 1% (실제는 카드 브랜드 1~1.1% + 카드사 0.25% 정도) |
+| 6 | 배송 규칙 값 | `04_seed_dev`의 임시값 (eBay $20, Shopify $15, AliExpress $3 · $10 이상 무료, Etsy $15) |
+| 7 | 기본 세금 규칙 | 전자기기 가정 관세 0%. 카테고리를 모르는 상품의 관세율 |
+| 8 | Shopify 에이전트 프로필 | 예시 fixture 사용 중. 운영 전 팀 프로필 호스팅 필요 |
+| 9 | Etsy 포함 여부 | 켜져 있음. 결과 성격상 끌지는 팀 결정 (`ETSY_ENABLED=false`) |
+| 10 | 각 API 약관 | 가격 저장 · 재표시 · 비교 허용, 제휴 링크 표시 의무 (eBay 제휴 링크는 EPN 캠페인 ID 필요) |
+| 11 | 호출 한도 | `daily-budget` 3,000 (eBay · Etsy 실제 한도 하루 5,000) |
+| 12 | 응답 시간 | 캐시 미스 약 1.3~2.8초(실측), 캐시 히트 약 0.1초. "p95 1초"는 캐시 히트에만 적용 가능 |
+| 13 | AliExpress 해외 창고 | 출발국 CN 고정이라 해외 창고(미국 등) 발송 상품도 $150 한도로 계산됨 (비용을 낮게 잡는 쪽은 아님) |
+| 14 | 프론트 복사본 동기화 | 백엔드 `static/`은 `GlobalPrice_frontend/static/` 복사본 (`USE_MOCK`만 다름). 원본 수정 시 다시 복사 |
+
+---
+
+## 부록. 변경 이력
+
+| 날짜 | 내용 |
 | --- | --- |
-| api_sources | `KOREAEXIM_RATE`, `EBAY_BROWSE`, `SHOPIFY_CATALOG`, `ALIEXPRESS_AFFILIATE`, `ETSY_OPEN_API`, `SEED` |
-| shopping_malls | eBay US(US), Shopify(US), AliExpress(CN), Etsy(US), 국내 직구관 시드(KR) |
-| shipping_rules | 쇼핑몰당 활성 1건 (배송비를 못 받는 AliExpress · Etsy · Shopify는 필수) |
-| tax_rules | 기본 규칙 1건(관세 0%, 부가세 10%, 면세 $150) + 미국 규칙 1건(면세 $200). 전자기기 가정이므로 팀 확인 필요 |
-| fee_rules | 해외결제 수수료 1건 (1.25~1.35% 안에서 팀 확정) |
-| store_events | 테스트용 SALE · COUPON 몇 건 |
-
----
-
-## 12. 구현 순서 (단계별 완료 기준)
-
-| 단계 | 내용 | 끝났다는 기준 |
-| --- | --- | --- |
-| 1 | 프로젝트 골격: Boot 4.1.1 · Java 25, DB 연결, `ErrorCode` · 전역 예외 처리, 세션 인터셉터, 설정 프로퍼티 | 앱 기동, 빈 `GET /api/exchange-rates`가 503 JSON 오류 형식으로 응답 |
-| 2 | 환율 수집 · 조회 (`03` 마이그레이션 포함) | 목 서버로 수집 테스트 통과, `GET /api/exchange-rates` 응답 |
-| 3 | `PriceCalculator` + 단위 테스트 | 5장 테스트 전부 통과 |
-| 4 | `MallSource` 인터페이스 + eBay 어댑터 + 저장 규칙 (4-3) | 샌드박스(또는 목)로 검색 → DB 저장 → 재실행 시 중복 없음 |
-| 5 | 검색 API (`GET /api/products`): 별칭 · 걸러내기 · 동시 호출 · 캐시 · 계산 · 정렬 · `sources` | 일부 소스 실패 시에도 200, 캐시 히트 시 외부 호출 0회 |
-| 6 | 상세 · 가격 이력 API, 단건 갱신 | stale 표시 동작 |
-| 7 | 회원 · 관심 상품 | 가입 → 로그인 → 찜 → 목록 |
-| 8 | 관심 상품 갱신 스케줄러 + 알림 조건 · 판정 · 받은 알림 (TARGET_PRICE · PERIOD_LOWEST) | 시드 알림이 가짜 가격 하락으로 알림 생성, 하루 1회 제한 |
-| 9 | Shopify 어댑터 | JSON · SSE 파싱 테스트, 가격 최소 단위 환산 |
-| 10 | AliExpress 어댑터 | 서명 단위 테스트, 승인 후 실호출 |
-| 11 | Etsy 어댑터 (기본 `enabled=false`) | 목 테스트 통과 |
-| 12 | EVENT_START · COUPON_EXPIRY 알림 (선택) | 판정 테스트 통과 |
-
-각 단계가 끝나면 무엇을 만들었고 무엇이 막혔는지 짧게 보고한다.
-
----
-
-## 13. 팀 확정이 필요한 것 (Claude Code가 임의로 정하지 말고 질문 · 보고)
-
-| # | 항목 | 현재 가정 |
-| --- | --- | --- |
-| 1 | 검색 응답 시간 목표 | 캐시 미스는 소스 타임아웃 때문에 최대 약 5초, 캐시 히트는 p95 1초. 기존 요구사항의 "검색 p95 1초"는 캐시 미스에는 적용 불가 |
-| 2 | 카테고리를 모르는 상품의 세금 | 국가 > 기본 규칙. 기본 규칙 값(관세율)을 전자기기 기준 0%로 둘지 |
-| 3 | 결제 수수료율 | 1.25~1.35% 중 선택 |
-| 4 | Shopify 에이전트 프로필 URL | 예시 URL 사용 중. 운영 허용 여부 확인 |
-| 5 | Etsy 포함 여부 | 구현은 하되 비활성으로 시작 |
-| 6 | 각 API 약관 | 가격 저장 · 재표시 · 비교 허용 여부, 제휴 링크 표시 의무 |
-| 7 | 소스당 가져올 개수 N | 20 |
-| 8 | 호출 한도 | `daily-budget` 시작값 3,000은 임시 |
-| 9 | 배송 기간 컬럼 | 1차는 DB에 저장하지 않음 (응답에만 `shipDays`) |
-| 10 | 한영 별칭 사전 관리 | 1차는 `aliases.csv` 파일 |
+| 2026-11-13 | v1.0 작성 (구현 전 명세) |
+| 2026-11-15 ~ 17 | v1.1: 실제 API 호출 결과 반영 (eBay · AliExpress 최저가 정렬 제거, eBay 원래 통화, Etsy 관련도순 · 이미지 추가 조회 · `keystring:shared_secret`, Shopify USD 요청 · 구매 링크 우선순위, AliExpress tracking_id 선택), 응답 필드를 프론트 API_SPEC 이름에 맞춤, 원화 수수료 면제는 KR 쇼핑몰만, 무료배송 기준은 할인 전 가격, 환율 서버 시작 시 최근 영업일 수집, PERIOD_LOWEST 누락 수정, 행사 알림 09:00, 4개 쇼핑몰 기본 켬, 키는 사용자 환경 변수 |
+| 2026-11-18 ~ 20 | 같은 상품 묶기(`match_key` · `listing_title`, 마이그레이션 002~004), 다른 구성 · 체크표 · 색상별 최저가, 이상 가격(`suspicious`), 모델코드 일치, 관련도 정렬, 출발국 통화 추정(`Origin`), 걸러내기 보강(통신사 잠김 · 박스만 · 시계 밴드 · for 브랜드 · 키워드 확대 · 복수형), 별칭 19개 추가, 상세 갱신 최대 6곳 |
+| 2026-11-22 | AliExpress 출발국 CN 고정 (USD라서 미국 $200 한도로 계산되던 문제). 명세 문서를 이 파일 하나로 통합 (v1.1 docx · 프론트 `API_SPEC.md` 두 벌 삭제) |

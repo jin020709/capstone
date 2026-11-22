@@ -5,7 +5,7 @@ window.GP = window.GP || {};
 
 GP.config = {
   // true: js/mock-data.js 예시 데이터 사용 (백엔드 없이 동작)
-  // false: Spring Boot API 호출 (API_SPEC.md 참고)
+  // false: Spring Boot API 호출 (BACKEND_SPEC.md 6장 참고)
   USE_MOCK: true,
 
   // Spring Boot 서버 주소. 같은 서버(static/)에서 서비스하면 '' 그대로 두면 됨

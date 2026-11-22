@@ -1,7 +1,7 @@
 /* =========================================================
    API 계층 — 화면 코드는 GP.api.* 만 호출합니다.
    USE_MOCK = true  → mock-data.js 로 응답을 흉내냄
-   USE_MOCK = false → Spring Boot REST API 호출 (API_SPEC.md)
+   USE_MOCK = false → Spring Boot REST API 호출 (BACKEND_SPEC.md 6장)
    ========================================================= */
 window.GP = window.GP || {};
 
@@ -70,7 +70,7 @@ GP.api = (function () {
   //  ok: 이번 갱신 성공 · stale: 갱신 실패 → 저장된 값(updatedAt 기준) · unavailable: 저장값도 없음
   function hoursAgo(h) { return new Date(Date.now() - h * 3600 * 1000).toISOString(); }
 
-  // 목업 offer → API 응답 Offer 형식 (API_SPEC.md · DB 컬럼과 같은 이름)
+  // 목업 offer → API 응답 Offer 형식 (BACKEND_SPEC.md 6장 · DB 컬럼과 같은 이름)
   function buildOffers(p, useCoupon) {
     var rates = M.exchangeRates.rates;
     var list = p.offers.map(function (o, idx) {
@@ -343,7 +343,7 @@ GP.api = (function () {
     /* ---------- 가격 하락 알림 ---------- */
     getAlerts: function () {
       if (!cfg.USE_MOCK) {
-        // API_SPEC 8번 응답(alertId · targetPriceKrw)을 화면에서 쓰는 이름으로 맞춤
+        // BACKEND_SPEC 6-9 응답(alertId · targetPriceKrw)을 화면에서 쓰는 이름으로 맞춤
         return request('/api/alerts').then(function (list) {
           return (list || []).map(function (a) {
             return { id: a.alertId, productId: a.productId, productName: a.productName, targetPrice: a.targetPriceKrw, alertBasis: a.alertBasis,

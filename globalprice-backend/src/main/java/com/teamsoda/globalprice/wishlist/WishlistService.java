@@ -25,7 +25,7 @@ import com.teamsoda.globalprice.exception.ErrorCode;
 public class WishlistService {
 
     /**
-     * 프론트 API_SPEC 7: ProductSummary 배열. 명세서 6-8 의 wishlistId · productId · productName · lowestTotalKrw ·
+     * BACKEND_SPEC 6-8: ProductSummary 배열에 wishlistId · productId · productName · lowestTotalKrw ·
      * createdAt 도 같이 담는다.
      */
     public record WishlistItem(long wishlistId, long id, long productId, String name, String productName,

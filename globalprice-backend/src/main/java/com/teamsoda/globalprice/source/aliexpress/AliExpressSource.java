@@ -52,6 +52,8 @@ public class AliExpressSource implements MallSource {
     static final String METHOD_QUERY = "aliexpress.affiliate.product.query";
     static final String METHOD_DETAIL = "aliexpress.affiliate.productdetail.get";
     private static final Pattern DAYS = Pattern.compile("(\\d+)");
+    /** AliExpress 출발국 (응답에 발송지가 없어 고정) */
+    static final String ORIGIN = "CN";
 
     private final GlobalPriceProperties.AliExpress props;
     private final RestClient rest;
@@ -187,8 +189,9 @@ public class AliExpressSource implements MallSource {
                 Matcher m = DAYS.matcher(shipTo);
                 if (m.find()) days = Integer.valueOf(m.group(1));
             }
+            // 출발국: 응답에 발송지 필드가 없어 중국으로 고정 (해외 창고 상품도 구분 불가. 면세 한도는 더 엄격한 $150 쪽)
             out.add(new MallOffer(id, "DEFAULT", Json.text(n, "product_title"), null, price, currency, null, "NEW",
-                    null, link, Json.text(n, "product_main_image_url"), StockStatus.IN_STOCK, days, null));
+                    ORIGIN, link, Json.text(n, "product_main_image_url"), StockStatus.IN_STOCK, days, null));
         }
         return out;
     }

@@ -8,8 +8,12 @@ import java.util.Map;
  * DB 에서 다시 읽은 리스팅은 출발국이 없어서 전부 쇼핑몰 나라(eBay US → 미국)로 찍혔다.
  * 쇼핑몰 API 가 준 값이 있으면 그걸 쓰고, 없으면 결제 통화가 쇼핑몰 기본 통화와 다를 때 통화의 나라로 본다
  * (예: Shopify 의 AED 상점 → 아랍에미리트, eBay 의 CAD 판매자 → 캐나다). 면세 한도($200 / $150)도 이 값으로 정해짐.
+ * 단, 우리가 통화를 지정해서 받는 쇼핑몰(AliExpress: target_currency=USD)은 통화가 출발국과 무관하므로 쇼핑몰 나라로 고정한다.
  */
 public final class Origin {
+
+    /** 통화로 출발국을 추정하면 안 되는 쇼핑몰 나라 (CN = AliExpress, 가격을 USD 로 바꿔 받음) */
+    private static final java.util.Set<String> FIXED_MALL_COUNTRY = java.util.Set.of("CN");
 
     private static final Map<String, String> HOME = Map.ofEntries(
             Map.entry("USD", "US"), Map.entry("CAD", "CA"), Map.entry("AUD", "AU"), Map.entry("NZD", "NZ"),
@@ -34,6 +38,9 @@ public final class Origin {
     /** @return 두 글자 나라 코드, 유로처럼 나라를 정할 수 없으면 null */
     public static String of(String originCountry, String currency, String mallCountry) {
         if (originCountry != null && !originCountry.isBlank()) return originCountry.toUpperCase(Locale.ROOT);
+        if (mallCountry != null && FIXED_MALL_COUNTRY.contains(mallCountry.toUpperCase(Locale.ROOT))) {
+            return mallCountry.toUpperCase(Locale.ROOT);
+        }
         if (currency == null) return mallCountry;
         String cur = currency.toUpperCase(Locale.ROOT);
         if (mallCountry != null && cur.equals(currencyOf(mallCountry))) return mallCountry;
