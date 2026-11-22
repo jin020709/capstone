@@ -30,7 +30,7 @@ import jakarta.validation.constraints.Positive;
 
 /**
  * 로그인 필요 API: 관심 상품 (6-8) · 가격 알림 (6-9) · 받은 알림 (6-10). 인증은 LoginInterceptor.
- * 목록은 프론트 API_SPEC 7 · 8 에 맞춰 배열로 응답한다.
+ * 목록은 BACKEND_SPEC 6-8 · 6-9 에 맞춰 배열로 응답한다.
  */
 @RestController
 @RequestMapping("/api")

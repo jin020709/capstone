@@ -185,10 +185,15 @@ MySQL 8.0 (테이블 19개)
 ```
 01_create_database.sql
 02_create_tables.sql
-03_seed_data.sql        (한 번만 · 테스트 데이터)
+03_seed_data.sql        (한 번만 · 테스트 데이터. 06보다 먼저)
 03_migration_001.sql    (환율 tts 컬럼 추가)
 04_seed_dev.sql         (쇼핑몰 · API 소스 · 규칙 · 테스트 행사)
+05_migration_002.sql    (검색어 별칭 테이블)
+06_migration_003.sql    (옵션 정규화 컬럼)
+07_migration_004.sql    (같은 상품 묶기 컬럼 · 필수: 없으면 검색이 실패해요)
 ```
+
+마이그레이션은 이미 적용돼 있으면 건너뛰므로 여러 번 실행해도 안전합니다. 시연용 가짜 가격 이력이 필요하면 상품을 몇 번 검색한 뒤 `90_demo_price_history.sql`을 실행합니다 (운영 DB에는 넣지 마세요).
 
 ### 6-2. 환경 변수 등록
 API 키와 DB 비밀번호는 **저장소에 올리지 않고 환경 변수로만** 받습니다. (키는 팀 채팅으로 따로 받으세요.)
@@ -239,7 +244,7 @@ Eclipse에서는 `File → Import → Gradle → Existing Gradle Project`로 `gl
 | GET · PATCH `/api/notifications` | 받은 알림 · 읽음 처리 |
 | GET `/api/health` | 서버 상태 확인 |
 
-오류 응답은 `{ status, code, message, timestamp }` 형식입니다.
+오류 응답은 `{ status, code, message, timestamp }` 형식입니다. 필드 단위 명세는 [BACKEND_SPEC.md](BACKEND_SPEC.md) 6장에 있습니다.
 
 <br>
 
@@ -257,7 +262,7 @@ globalprice-main
 │        └─ web
 ├─ GlobalPrice_frontend/       프론트엔드 원본 (HTML · CSS · JS)
 ├─ GlobalPrice_DB/             MySQL 스크립트 · ERD
-├─ BACKEND_SPEC_v1.1.docx      백엔드 명세
+├─ BACKEND_SPEC.md             명세서 (백엔드 · 외부 API · 가격 계산 · 프론트 API 필드, 유일한 기준 문서)
 └─ README.md
 ```
 
@@ -267,8 +272,8 @@ globalprice-main
 
 ## 9. 알려진 한계 · 개선 예정
 
-- 같은 상품을 판매처끼리 1줄로 묶는 기능(모델번호 기준)은 다음 단계에서 적용합니다.
-- 케이스 · 필름 같은 **액세서리와 비정상적으로 낮은 가격**이 일부 섞일 수 있어, 제외 키워드와 이상값 필터를 보강할 예정입니다.
+- 같은 상품 묶기는 아이폰 · 갤럭시 · 픽셀 · 맥북 · 아이패드는 모델 + 용량 기준, 그 밖의 상품은 모델코드나 상품명이 같을 때만 묶습니다. 이름이 조금만 달라도 따로 나올 수 있습니다.
+- 케이스 · 필름 같은 **액세서리와 비정상적으로 낮은 가격**은 제외 키워드와 이상 가격 판정으로 거르지만, 이름에 표시가 없거나 판매처가 1곳뿐인 상품은 일부 섞일 수 있습니다.
 - 같은 날 여러 상품을 사는 **합산 과세**는 계산하지 않습니다. (상품 1개 기준 예상 금액)
 - 통관 시 확정 세액을 보장하지 않으며, 화면의 금액은 **예상 금액**입니다.
 

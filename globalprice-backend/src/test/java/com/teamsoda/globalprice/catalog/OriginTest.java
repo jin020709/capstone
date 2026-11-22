@@ -27,4 +27,11 @@ class OriginTest {
         assertThat(Origin.of(null, "EUR", "US")).isNull();          // 유로권은 모름
         assertThat(Origin.of(null, "KRW", "US")).isEqualTo("US");   // 원화 현지가는 쇼핑몰 나라
     }
+
+    @Test
+    void aliExpress_isAlwaysChina() {   // target_currency=USD 로 받으므로 USD 여도 미국이 아님 (DB 에서 다시 읽은 리스팅 포함)
+        assertThat(Origin.of(null, "USD", "CN")).isEqualTo("CN");
+        assertThat(Origin.of(null, "EUR", "CN")).isEqualTo("CN");
+        assertThat(Origin.of("CN", "USD", "CN")).isEqualTo("CN");
+    }
 }

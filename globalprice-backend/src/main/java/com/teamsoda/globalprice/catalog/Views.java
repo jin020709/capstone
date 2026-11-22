@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 응답 JSON 모양. 필드 이름은 프론트 API_SPEC.md 를 따른다 (ProductSummary · Offer · Event).
+ * 응답 JSON 모양. 필드 이름은 BACKEND_SPEC.md 6장을 따른다 (ProductSummary · Offer · Event).
  * 시각은 KST LocalDateTime (yyyy-MM-dd'T'HH:mm:ss).
  */
 public final class Views {

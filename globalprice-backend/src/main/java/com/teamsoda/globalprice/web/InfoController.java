@@ -29,7 +29,7 @@ import com.teamsoda.globalprice.rate.ExchangeRateService;
 public class InfoController {
 
     /**
-     * 프론트 API_SPEC 1 (base · source · baseDate · updatedAt · rates 맵) + 명세서 6-5 (items 배열).
+     * BACKEND_SPEC 6-5 (base · source · baseDate · updatedAt · rates 맵 + items 배열).
      * rates 는 계산에 쓰는 값 (전신환매도율, 없으면 매매기준율), 1 단위 기준.
      */
     public record ExchangeRatesResponse(String base, String source, LocalDate baseDate, LocalDateTime updatedAt,

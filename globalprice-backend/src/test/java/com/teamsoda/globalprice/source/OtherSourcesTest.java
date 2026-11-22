@@ -155,6 +155,7 @@ class OtherSourcesTest {
         MallOffer jbl = offers.stream().filter(o -> o.title().startsWith("JBL")).findFirst().orElseThrow();
         assertThat(jbl.price()).isEqualByComparingTo("28.06");
         assertThat(jbl.currencyCode()).isEqualTo("USD");
+        assertThat(offers).allMatch(o -> "CN".equals(o.originCountry()));   // 응답에 발송지가 없어 중국 고정
         assertThat(jbl.productUrl()).startsWith("https://www.aliexpress.com/item/");   // 제휴 링크 아님
         assertThat(jbl.imageUrl()).isNotNull();
         String body = http.requests().getFirst().body();
