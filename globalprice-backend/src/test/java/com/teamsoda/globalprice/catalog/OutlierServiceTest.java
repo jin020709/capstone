@@ -36,7 +36,7 @@ class OutlierServiceTest {
     static List<ProductGroup> judge(List<ProductGroup> gs) {
         List<OutlierService.Member> pool = new ArrayList<>();
         gs.forEach(g -> pool.add(OutlierService.member(g)));
-        return OutlierService.judgeWith(gs, pool);
+        return OutlierService.judgeWith(gs, pool, pool);
     }
 
     @Test
@@ -71,8 +71,21 @@ class OutlierServiceTest {
                 OutlierService.member(grp(1, "Samsung Galaxy Z Fold4 256GB", 705_680)),
                 OutlierService.member(grp(2, "Samsung Galaxy Z Fold4 512GB", 823_812)),
                 OutlierService.member(lone));
-        assertThat(OutlierService.judgeWith(List.of(lone), pool).getFirst().offers().getFirst().status())
-                .isEqualTo(PriceStatus.suspicious);
+        assertThat(OutlierService.judgeWith(List.of(lone), pool, List.of(OutlierService.member(lone))).getFirst()
+                .offers().getFirst().status()).isEqualTo(PriceStatus.suspicious);
+    }
+
+    @Test
+    void caseIsNotComparedWithStoredPhonesOfSameSeries() {   // 11/26: "아이폰 17 케이스" 결과가 전부 이상 가격이 됨
+        ProductGroup caseGroup = grp(9, "iPhone 17 Silicone Case", 56_180);
+        List<OutlierService.Member> dbPhones = new ArrayList<>(List.of(
+                OutlierService.member(grp(1, "Apple iPhone 17 256GB", 1_230_060)),
+                OutlierService.member(grp(2, "Apple iPhone 17 Pro 256GB", 1_497_158)),
+                OutlierService.member(grp(3, "Apple iPhone 17 Pro Max 256GB", 1_821_135))));
+        dbPhones.add(OutlierService.member(caseGroup));
+        // 같은 모델 비교 대상(DB)에는 본품이 있지만, 시리즈 비교는 같은 요청의 상품끼리만
+        assertThat(OutlierService.judgeWith(List.of(caseGroup), dbPhones, List.of(OutlierService.member(caseGroup)))
+                .getFirst().offers().getFirst().comparable()).isTrue();
     }
 
     @Test

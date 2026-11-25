@@ -37,7 +37,8 @@ class GlobalPriceApplicationTests extends IntegrationTestBase {
                 .andExpect(jsonPath("$.offers[?(@.storeName=='Amazon US')].total").value(1187256))
                 .andExpect(jsonPath("$.offers[?(@.storeName=='Amazon US')].totalNormal").value(1264956))
                 .andExpect(jsonPath("$.offers[?(@.storeName=='Rakuten Japan')].total").value(1254855))
-                .andExpect(jsonPath("$.bestTotal").value(1187256));
+                .andExpect(jsonPath("$.bestTotal").value(1187256))
+                .andExpect(jsonPath("$.colors").isArray());   // 색상별 최저가 (색상이 2개 미만이면 빈 배열)
         mvc.perform(get("/api/products/999999")).andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PRODUCT_NOT_FOUND"));
         mvc.perform(get("/api/products/1/price-history").param("period", "1y")).andExpect(status().isOk())

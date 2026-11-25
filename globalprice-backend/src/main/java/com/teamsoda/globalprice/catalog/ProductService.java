@@ -54,7 +54,8 @@ public class ProductService {
                                 List<String> badges, Long bestTotal, Long bestNormalTotal, String bestStore,
                                 int offerCount, List<OfferView> offers, List<OfferView> variants,
                                 List<EventView> events, RatesView rates, String priceStatus,
-                                LocalDateTime fetchedAt, Boolean wished, List<ConfigView> configs) {
+                                LocalDateTime fetchedAt, Boolean wished, List<ConfigView> configs,
+                                List<Views.ColorView> colors) {
     }
 
     /**
@@ -139,7 +140,7 @@ public class ProductService {
         return new ProductDetail(productId, meta.productName(), meta.brandName(), meta.modelNumber(), null,
                 meta.description(), meta.imageUrl(), s.categoryName(), null, null, s.badges(), s.bestTotal(),
                 s.bestNormalTotal(), s.bestStore(), s.offerCount(), s.offers(), s.offers(), events,
-                views.rates(ctx.fx()), priceStatus, fetchedAt, wished, cfg);
+                views.rates(ctx.fx()), priceStatus, fetchedAt, wished, cfg, s.colors());
     }
 
     /**

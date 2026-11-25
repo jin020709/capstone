@@ -51,6 +51,25 @@ tasks.named('test') {
     // GP_TEST_DB_URL 이 있으면 Docker 없이 그 DB 로 통합 테스트 (IntegrationTestBase 참고)
 }
 
+// 화면: ../GlobalPrice_frontend/static (원본 하나만 관리) 을 빌드할 때 static/ 으로 복사한다.
+// 서버에서는 실제 API 를 쓰도록 js/config.js 의 USE_MOCK 만 false 로 바꾼다 (예전에는 손으로 복사본을 맞췄음)
+def frontendStatic = file('../GlobalPrice_frontend/static')
+tasks.named('processResources', ProcessResources) {
+    inputs.dir(frontendStatic)
+    from(frontendStatic) {
+        into 'static'
+        filesMatching('js/config.js') {
+            filter { String line -> line.replace('USE_MOCK: true', 'USE_MOCK: false') }
+        }
+    }
+    doLast {
+        def config = file("${destinationDir}/static/js/config.js")
+        if (!config.exists() || !config.getText('UTF-8').contains('USE_MOCK: false')) {
+            throw new GradleException("static/js/config.js 에 USE_MOCK: false 가 없음 (GlobalPrice_frontend/static/js/config.js 형식 확인)")
+        }
+    }
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.compilerArgs << '-parameters'

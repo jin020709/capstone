@@ -24,13 +24,12 @@ import com.teamsoda.globalprice.catalog.Offers.ProductGroup;
  *   <li>같은 모델 다른 구성(용량만 다름) 2개 이상의 최저가 중간값의 1/3 미만</li>
  *   <li>다른 구성이 없으면 같은 시리즈(세대만 다름, 모델이 확실한 상품 3개 이상) 중간값의 1/5 미만</li>
  * </ol>
- * 2 · 3 의 비교 대상은 DB 에 저장된 같은 계열 상품 + 지금 판정하는 상품들 (지금 계산한 값이 우선).
+ * 2 의 비교 대상은 DB 에 저장된 같은 모델 상품 + 지금 판정하는 상품들 (지금 계산한 값이 우선),
+ * 3 은 지금 판정하는 상품들끼리만 (같은 검색 결과 · 같은 찜 목록).
  */
 @Service
 public class OutlierService {
 
-    /** 시리즈 비교에 쓰는 DB 상품 수 상한 (최근 상품부터) */
-    static final int SERIES_POOL_LIMIT = 300;
     /** 같은 모델 다른 구성 상한 (구성 수는 보통 2~6개) */
     static final int FAMILY_POOL_LIMIT = 50;
 
@@ -65,30 +64,29 @@ public class OutlierService {
             if (f != null) families.add(f);
         }
         for (String f : families) members(f + "|", FAMILY_POOL_LIMIT, ctx).forEach(m -> pool.put(m.productId(), m));
-        marked.forEach(g -> pool.put(g.productId(), member(g)));
-        // 다른 구성이 모자란 상품만 시리즈 비교 → 그 시리즈만 DB 에서 더 읽음
-        Set<String> series = new java.util.LinkedHashSet<>();
-        for (ProductGroup g : marked) {
-            Member m = member(g);
-            if (m.series() != null && familyReference(m, pool.values()) == null) series.add(m.series());
-        }
-        for (String s : series) {
-            members(s + "|", SERIES_POOL_LIMIT, ctx).forEach(m -> pool.putIfAbsent(m.productId(), m));
-        }
-        return judgeWith(marked, pool.values());
+        List<Member> current = marked.stream().map(OutlierService::member).toList();
+        current.forEach(m -> pool.put(m.productId(), m));
+        return judgeWith(marked, pool.values(), current);
     }
 
-    /** 2 · 3 단계 (순수 함수, 테스트용). marked 는 1단계를 마친 상품들, pool 은 비교 대상 */
-    static List<ProductGroup> judgeWith(List<ProductGroup> marked, Collection<Member> pool) {
+    /**
+     * 2 · 3 단계 (순수 함수, 테스트용). marked 는 1단계를 마친 상품들.
+     *
+     * @param familyPool 같은 모델 다른 구성 비교 대상 (DB + 지금 상품들)
+     * @param seriesPool 같은 시리즈 비교 대상 = 지금 상품들만. DB 전체와 비교하면 "아이폰 17 케이스" 검색의 케이스가
+     *                   저장된 아이폰 본품 가격과 비교돼 전부 이상 가격이 된다 (11/26 확인)
+     */
+    static List<ProductGroup> judgeWith(List<ProductGroup> marked, Collection<Member> familyPool,
+                                        Collection<Member> seriesPool) {
         List<ProductGroup> out = new ArrayList<>(marked.size());
         for (ProductGroup g : marked) {
             Member me = member(g);
-            Long ref = familyReference(me, pool);
+            Long ref = familyReference(me, familyPool);
             if (ref != null) {
                 out.add(g.withOffers(PriceOutliers.markBelow(g.offers(), ref)));
                 continue;
             }
-            Long seriesRef = seriesReference(me, pool);
+            Long seriesRef = seriesReference(me, seriesPool);
             out.add(seriesRef == null ? g
                     : g.withOffers(PriceOutliers.markBelow(g.offers(), seriesRef, PriceOutliers.SERIES_RATIO)));
         }

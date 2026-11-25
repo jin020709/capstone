@@ -158,45 +158,21 @@
     renderWish();
   }
 
-  // ---------- 색상: 같은 상품으로 묶인 판매처를 색상으로 거르기 (상품명에서 색상 단어를 찾음) ----------
-  // 긴 이름부터 (Mist Blue 가 Blue 로 잡히지 않게). 독일어 · 한글 표기도 같은 색으로
-  var COLORS = [
-    ['Cosmic Orange', /cosmic\s*orange/], ['Deep Blue', /deep\s*blue/], ['Mist Blue', /mist\s*blue|nebelblau|미스트\s*블루/],
-    ['Sky Blue', /sky\s*blue/], ['Light Gold', /light\s*gold/], ['Space Black', /space\s*black/], ['Cloud White', /cloud\s*white/],
-    ['Icy Blue', /icy\s*blue|icyblue/], ['Titanium Black', /titanium\s*black/], ['Titanium Silver', /titanium\s*silver/],
-    ['Titanium Gray', /titanium\s*gr[ae]y/], ['Titanium Blue', /titanium\s*blue/], ['Space Gray', /space\s*gr[ae]y/],
-    ['Midnight', /midnight/], ['Starlight', /starlight/], ['Sage', /\bsage\b|salbei|세이지/], ['Lavender', /lavender|lavendel|라벤더/],
-    ['Navy', /\bnavy\b/], ['Mint', /\bmint\b/], ['Black', /\bblack\b|schwarz|블랙/], ['White', /\bwhite\b|wei(ss|ß)|화이트/],
-    ['Silver', /\bsilver\b|silber|실버/], ['Gold', /\bgold\b|골드/], ['Blue', /\bblue\b|blau|블루/], ['Pink', /\bpink\b|핑크/],
-    ['Purple', /\bpurple\b|퍼플/], ['Green', /\bgreen\b|grün|그린/], ['Red', /\bred\b|레드/], ['Yellow', /\byellow\b|옐로/],
-    ['Gray', /\bgr[ae]y\b|grau|그레이/], ['Orange', /\borange\b|오렌지/]
-  ];
+  // ---------- 색상: 같은 상품으로 묶인 판매처를 색상으로 거르기 ----------
+  // 색상 판단(offers[].color)과 색상별 최저가(colors)는 서버가 한다 → 검색 결과의 색상 줄과 항상 같은 값
   var colorFilter = U.param('color') || '';   // 검색 결과의 색상 줄에서 들어오면 그 색상을 골라 둠
-  function colorOf(o) {
-    if (o.color !== undefined) return o.color || '';   // 서버가 판단한 색상 (검색 결과의 색상별 최저가와 같은 기준)
-    var t = (o.title || '').toLowerCase();
-    if (/multi\s*-?colou?r|all\s*colou?rs/.test(t)) return '';
-    for (var i = 0; i < COLORS.length; i++) if (COLORS[i][1].test(t)) return COLORS[i][0];
-    return '';
-  }
+  function colorOf(o) { return o.color || ''; }
   function renderColors() {
-    var box = U.$('#colorChips'), counts = {}, best = {};
-    product.offers.forEach(function (o) {
-      var c = colorOf(o);
-      if (!c) return;
-      counts[c] = (counts[c] || 0) + 1;
-      if (P.comparable(o) && o.total != null && (best[c] == null || o.total < best[c])) best[c] = o.total;
-    });
-    // 색상별 최저가가 싼 순 (다나와 "다른 구성"처럼)
-    var names = Object.keys(counts).sort(function (a, b) { return (best[a] == null ? Infinity : best[a]) - (best[b] == null ? Infinity : best[b]); });
-    if (colorFilter && !counts[colorFilter]) colorFilter = '';
-    box.classList.toggle('hidden', names.length < 2);
-    if (names.length < 2) { colorFilter = ''; return; }
+    var box = U.$('#colorChips');
+    var colors = product.colors || [];   // 싼 색상부터, 색상이 2개 이상일 때만 옴
+    if (colorFilter && !colors.some(function (c) { return c.name === colorFilter; })) colorFilter = '';
+    box.classList.toggle('hidden', colors.length < 2);
+    if (colors.length < 2) { colorFilter = ''; return; }
     var chip = function (value, label) {
       return '<button type="button" class="chip" data-color="' + U.esc(value) + '" aria-pressed="' + String(colorFilter === value) + '">' + U.esc(label) + '</button>';
     };
     box.innerHTML = '<span class="small muted" style="align-self:center">색상</span>' + chip('', '전체') +
-      names.map(function (c) { return chip(c, c + (best[c] != null ? ' ' + P.won(best[c]) : '') + ' · ' + counts[c] + '곳'); }).join('');
+      colors.map(function (c) { return chip(c.name, c.name + (c.bestTotal != null ? ' ' + P.won(c.bestTotal) : '') + ' · ' + c.offerCount + '곳'); }).join('');
   }
   function renderOffers() {
     var list = colorFilter ? product.offers.filter(function (o) { return colorOf(o) === colorFilter; }) : product.offers;
