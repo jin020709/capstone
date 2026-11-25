@@ -10,13 +10,13 @@ import org.junit.jupiter.api.Test;
 class RelevanceTest {
 
     private static double s(String q, String name) {
-        return SearchService.textScore(SearchService.tokens(q), name);
+        return SearchRanker.textScore(SearchRanker.tokens(q), name);
     }
 
     @Test
     void tokens_splitModelNumbers() {
-        assertThat(SearchService.tokens("Galaxy Z Fold7 256 GB")).containsExactly("galaxy", "z", "fold", "7", "256gb");
-        assertThat(SearchService.tokens("iPhone 17e")).containsExactly("iphone", "17", "e");
+        assertThat(SearchRanker.tokens("Galaxy Z Fold7 256 GB")).containsExactly("galaxy", "z", "fold", "7", "256gb");
+        assertThat(SearchRanker.tokens("iPhone 17e")).containsExactly("iphone", "17", "e");
     }
 
     @Test
@@ -42,6 +42,6 @@ class RelevanceTest {
     void unrelated_isZero() {
         assertThat(s("mechanical keyboard", "Gaming mouse")).isZero();
         assertThat(s("", "anything")).isEqualTo(1.0);
-        assertThat(SearchService.tokens(null)).isEqualTo(List.of());
+        assertThat(SearchRanker.tokens(null)).isEqualTo(List.of());
     }
 }

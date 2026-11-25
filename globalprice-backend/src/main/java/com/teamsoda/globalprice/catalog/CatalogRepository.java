@@ -24,12 +24,11 @@ import com.teamsoda.globalprice.source.MallSource.MallOffer;
 import com.teamsoda.globalprice.source.MallSource.StockStatus;
 
 /**
- * products · mall_products · mall_product_variants · price_history 저장과 조회 (JdbcTemplate).
- * 같은 상품 묶기: {@link ProductMatcher} 키(products.match_key)가 같은 리스팅은 같은 products 행에 붙는다
- * (products 1행 : mall_products N행). 키를 못 만든 리스팅은 지금처럼 상품 1행을 따로 만든다.
+ * products · mall_products · mall_product_variants · price_history 저장과 조회 (JdbcTemplate). SQL 만 둔다.
+ * 같은 상품 묶기 판단은 {@link ProductGrouping} (products 1행 : mall_products N행, 키는 products.match_key).
  */
 @Repository
-public class CatalogRepository {
+public class CatalogRepository implements ProductGrouping.Store {
 
     /** 저장된 offer 1건 (상품 + 쇼핑몰 상품 + 옵션) */
     public record StoredOffer(long productId, String productName, String imageUrl, String description,
@@ -87,45 +86,40 @@ public class CatalogRepository {
         this.named = named;
     }
 
-    // ---------------- 저장 (4-3) ----------------
+    // ---------------- 저장 (4-3). 언제 무엇을 저장할지는 CatalogService · ProductGrouping 이 정한다 ----------------
 
-    /**
-     * 같은 트랜잭션 안에서 호출할 것. (mall_id, external_product_id) 기준 upsert.
-     * 처음 보는 리스팅은 묶기 키가 같은 상품에 붙이고(없으면 새로 만듦), 이미 있는 리스팅이 아직 혼자인
-     * 예전 상품(키 없음)에 있으면 같은 키의 상품으로 옮긴다 → 예전 데이터도 다시 검색되면 합쳐진다.
-     */
-    public SavedIds upsert(long mallId, MallOffer o, LocalDateTime now) {
-        String externalId = cut(o.externalProductId(), 255);
-        List<long[]> found = jdbc.query(
+    /** 저장된 리스팅 위치 */
+    public record ListingRef(long mallProductId, long productId) {
+    }
+
+    /** (mall_id, external_product_id) 로 저장된 리스팅. 없으면 null */
+    public ListingRef findListing(long mallId, String externalProductId) {
+        List<ListingRef> found = jdbc.query(
                 "SELECT mall_product_id, product_id FROM mall_products WHERE mall_id = ? AND external_product_id = ?",
-                (rs, i) -> new long[] { rs.getLong(1), rs.getLong(2) }, mallId, externalId);
-        long mallProductId;
-        long productId;
-        String url = cut(o.productUrl(), 1000);
-        String image = cut(o.imageUrl(), 1000);
-        String listingTitle = nameOf(o);
-        ProductMatcher.Match match = ProductMatcher.match(matchText(o));
-        if (found.isEmpty()) {
-            productId = productFor(match, listingTitle, image);
-            mallProductId = insert("""
-                    INSERT INTO mall_products (product_id, mall_id, external_product_id, listing_title, product_url,
-                                               currency_code, shipping_fee, last_fetched_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    productId, mallId, externalId, listingTitle, url, o.currencyCode(), o.shippingFee(),
-                    Timestamp.valueOf(now));
-        } else {
-            mallProductId = found.getFirst()[0];
-            productId = regroup(mallProductId, found.getFirst()[1], match, image, listingTitle);
-            jdbc.update("""
-                    UPDATE mall_products SET listing_title = ?, product_url = COALESCE(?, product_url),
-                           currency_code = ?, shipping_fee = ?, last_fetched_at = ?
-                    WHERE mall_product_id = ?""",
-                    listingTitle, url, o.currencyCode(), o.shippingFee(), Timestamp.valueOf(now), mallProductId);
-            if (image != null) {
-                jdbc.update("UPDATE products SET image_url = ? WHERE product_id = ? AND image_url IS NULL",
-                        image, productId);
-            }
-        }
+                (rs, i) -> new ListingRef(rs.getLong(1), rs.getLong(2)), mallId, cut(externalProductId, 255));
+        return found.isEmpty() ? null : found.getFirst();
+    }
+
+    public long insertListing(long productId, long mallId, MallOffer o, LocalDateTime now) {
+        return insert("""
+                INSERT INTO mall_products (product_id, mall_id, external_product_id, listing_title, product_url,
+                                           currency_code, shipping_fee, last_fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                productId, mallId, cut(o.externalProductId(), 255), listingTitle(o), cut(o.productUrl(), 1000),
+                o.currencyCode(), o.shippingFee(), Timestamp.valueOf(now));
+    }
+
+    public void updateListing(long mallProductId, MallOffer o, LocalDateTime now) {
+        jdbc.update("""
+                UPDATE mall_products SET listing_title = ?, product_url = COALESCE(?, product_url),
+                       currency_code = ?, shipping_fee = ?, last_fetched_at = ?
+                WHERE mall_product_id = ?""",
+                listingTitle(o), cut(o.productUrl(), 1000), o.currencyCode(), o.shippingFee(), Timestamp.valueOf(now),
+                mallProductId);
+    }
+
+    /** (mall_product_id, external_variant_id) 기준 upsert → mall_variant_id */
+    public long upsertVariant(long mallProductId, MallOffer o, LocalDateTime now) {
         String variantId = o.externalVariantId() == null ? "DEFAULT" : cut(o.externalVariantId(), 255);
         StockStatus stock = o.stock() == null ? StockStatus.UNKNOWN : o.stock();
         jdbc.update("""
@@ -136,81 +130,81 @@ public class CatalogRepository {
                     current_price = VALUES(current_price), stock_status = VALUES(stock_status),
                     updated_at = VALUES(updated_at)""",
                 mallProductId, variantId, cut(o.variantName(), 255), o.price(), stock.name(), Timestamp.valueOf(now));
-        Long mallVariantId = jdbc.queryForObject(
+        Long id = jdbc.queryForObject(
                 "SELECT mall_variant_id FROM mall_product_variants WHERE mall_product_id = ? AND external_variant_id = ?",
                 Long.class, mallProductId, variantId);
-        String[] product = jdbc.queryForObject("SELECT product_name, match_key FROM products WHERE product_id = ?",
+        if (id == null) throw new IllegalStateException("mall_variant_id 없음");
+        return id;
+    }
+
+    /** [product_name, match_key] */
+    public String[] nameAndKey(long productId) {
+        return jdbc.queryForObject("SELECT product_name, match_key FROM products WHERE product_id = ?",
                 (rs, i) -> new String[] { rs.getString(1), rs.getString(2) }, productId);
-        return new SavedIds(productId, mallProductId, mallVariantId, product[0], product[1]);
     }
 
-    /** 처음 보는 리스팅의 상품: 같은 묶기 키의 상품이 있으면 그것, 없으면 새로 만든다 */
-    private long productFor(ProductMatcher.Match match, String listingTitle, String image) {
-        if (match == null) {
-            return insert("INSERT INTO products (product_name, image_url) VALUES (?, ?)", listingTitle, image);
-        }
-        Long existing = productByKey(match.key());
-        if (existing != null) {
-            if (image != null) {
-                jdbc.update("UPDATE products SET image_url = ? WHERE product_id = ? AND image_url IS NULL",
-                        image, existing);
-            }
-            return existing;
-        }
-        // 동시에 같은 키를 처음 넣으면 UNIQUE 위반 → CatalogService.save 가 한 번 더 시도해서 위 경로로 감
+    // ---- ProductGrouping.Store ----
+
+    @Override
+    public Long productByKey(String key) {
+        List<Long> ids = jdbc.queryForList("SELECT product_id FROM products WHERE match_key = ?", Long.class, key);
+        return ids.isEmpty() ? null : ids.getFirst();
+    }
+
+    @Override
+    public long insertProduct(String name, String imageUrl, String matchKey) {
         return insert("INSERT INTO products (product_name, image_url, match_key) VALUES (?, ?, ?)",
-                productName(match, listingTitle), image, match.key());
+                name, imageUrl, matchKey);
     }
 
-    /**
-     * 이미 저장된 리스팅의 상품 정리. 지금 상품명으로 만든 묶기 키가 상품의 키와 다르면 맞는 상품으로 옮긴다.
-     * 예전 방식(키 없는 상품 1 : 리스팅 1)이나, 판단 규칙이 나중에 고쳐진 경우("iPhone 17 Air" → iPhone Air)도
-     * 다음 검색 때 저절로 바로잡힌다.
-     * <ul>
-     *   <li>리스팅이 혼자인 상품이고 맞는 키의 상품이 아직 없으면 → 이 상품에 키를 달고 대표 이름으로 바꿈</li>
-     *   <li>그 밖에는 → 리스팅을 맞는 키의 상품(없으면 새로 만듦)으로 옮김. 빈 상품은 찜을 옮긴 뒤 지움.
-     *       혼자인 상품에 가격 알림이 걸려 있으면 알림이 끊기지 않게 그대로 둠</li>
-     * </ul>
-     */
-    private long regroup(long mallProductId, long productId, ProductMatcher.Match match, String image,
-                         String listingTitle) {
-        if (match == null) return productId;
-        String currentKey = matchKey(productId);
-        if (match.key().equals(currentKey)) {
-            // 예전에 상품명이 두 번 붙어 저장된 것 정리 (모델코드 · 상품명 키 상품은 리스팅 이름 그대로)
-            if (match.key().startsWith("t:") || match.key().startsWith("code:")) {
-                jdbc.update("UPDATE products SET product_name = ? WHERE product_id = ? AND product_name <> ?",
-                        listingTitle, productId, listingTitle);
-            }
-            return productId;
-        }
-        Integer listings = jdbc.queryForObject("SELECT COUNT(*) FROM mall_products WHERE product_id = ?",
-                Integer.class, productId);
-        boolean alone = listings != null && listings == 1;
-        Long target = productByKey(match.key());
-        if (target == null && alone) {
-            jdbc.update("UPDATE products SET match_key = ?, product_name = ? WHERE product_id = ?",
-                    match.key(), productName(match, listingTitle), productId);
-            return productId;
-        }
-        if (alone) {
-            Integer alerts = jdbc.queryForObject("SELECT COUNT(*) FROM price_alerts WHERE product_id = ?",
-                    Integer.class, productId);
-            if (alerts != null && alerts > 0) return productId;
-        }
-        if (target == null) {
-            target = insert("INSERT INTO products (product_name, image_url, match_key) VALUES (?, ?, ?)",
-                    productName(match, listingTitle), image, match.key());
-        }
-        jdbc.update("UPDATE mall_products SET product_id = ? WHERE mall_product_id = ?", target, mallProductId);
-        if (alone) {
-            jdbc.update("UPDATE IGNORE wishlists SET product_id = ? WHERE product_id = ?", target, productId);
-            jdbc.update("DELETE FROM products WHERE product_id = ?", productId);   // 남은 중복 찜은 CASCADE 로 정리
-        }
-        return target;
+    @Override
+    public void fillImage(long productId, String imageUrl) {
+        jdbc.update("UPDATE products SET image_url = ? WHERE product_id = ? AND image_url IS NULL", imageUrl, productId);
+    }
+
+    @Override
+    public void setKeyAndName(long productId, String matchKey, String name) {
+        jdbc.update("UPDATE products SET match_key = ?, product_name = ? WHERE product_id = ?", matchKey, name,
+                productId);
+    }
+
+    @Override
+    public void rename(long productId, String name) {
+        jdbc.update("UPDATE products SET product_name = ? WHERE product_id = ? AND product_name <> ?", name, productId,
+                name);
+    }
+
+    @Override
+    public int listingCount(long productId) {
+        Integer c = jdbc.queryForObject("SELECT COUNT(*) FROM mall_products WHERE product_id = ?", Integer.class,
+                productId);
+        return c == null ? 0 : c;
+    }
+
+    @Override
+    public int alertCount(long productId) {
+        Integer c = jdbc.queryForObject("SELECT COUNT(*) FROM price_alerts WHERE product_id = ?", Integer.class,
+                productId);
+        return c == null ? 0 : c;
+    }
+
+    @Override
+    public void moveListing(long mallProductId, long productId) {
+        jdbc.update("UPDATE mall_products SET product_id = ? WHERE mall_product_id = ?", productId, mallProductId);
+    }
+
+    @Override
+    public void moveWishlists(long fromProductId, long toProductId) {
+        jdbc.update("UPDATE IGNORE wishlists SET product_id = ? WHERE product_id = ?", toProductId, fromProductId);
+    }
+
+    @Override
+    public void deleteProduct(long productId) {
+        jdbc.update("DELETE FROM products WHERE product_id = ?", productId);
     }
 
     /** 상품의 묶기 키 (없으면 null) */
+    @Override
     public String matchKey(long productId) {
         // match_key 가 NULL 인 행이 있으므로 stream().findFirst() 를 쓰면 NPE (Optional.of(null))
         List<String> keys = jdbc.queryForList("SELECT match_key FROM products WHERE product_id = ?", String.class,
@@ -218,33 +212,14 @@ public class CatalogRepository {
         return keys.isEmpty() ? null : keys.getFirst();
     }
 
-    /** 묶기 키가 prefix 로 시작하는 상품들 (id → key). 다른 구성 찾기용 */
-    public Map<Long, String> productsByKeyPrefix(String prefix) {
+    /** 묶기 키가 prefix 로 시작하는 상품들 (id → key), 최근 상품부터 최대 limit 개. 다른 구성 · 이상 가격 비교용 */
+    public Map<Long, String> productsByKeyPrefix(String prefix, int limit) {
         Map<Long, String> out = new LinkedHashMap<>();
         String like = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
-        jdbc.query("SELECT product_id, match_key FROM products WHERE match_key LIKE ? ORDER BY product_id",
-                (rs, i) -> new Object[] { rs.getLong(1), rs.getString(2) }, like)
+        jdbc.query("SELECT product_id, match_key FROM products WHERE match_key LIKE ? ORDER BY product_id DESC LIMIT ?",
+                (rs, i) -> new Object[] { rs.getLong(1), rs.getString(2) }, like, limit)
                 .forEach(r -> out.put((Long) r[0], (String) r[1]));
         return out;
-    }
-
-    private Long productByKey(String key) {
-        return jdbc.query("SELECT product_id FROM products WHERE match_key = ?", (rs, i) -> rs.getLong(1), key)
-                .stream().findFirst().orElse(null);
-    }
-
-    /** 묶기 판단에 쓰는 글자: 상품명 + 옵션 이름 (Shopify 는 용량이 옵션에만 있음) */
-    static String matchText(MallOffer o) {
-        String title = o.title() == null ? "" : o.title();
-        String v = o.variantName() == null ? "" : o.variantName().strip();
-        // 옵션 이름이 상품명을 그대로 담고 있으면 (Shopify 일부 상점) 두 번 붙이지 않음
-        if (v.isEmpty() || title.toLowerCase(java.util.Locale.ROOT).contains(v.toLowerCase(java.util.Locale.ROOT))) return title;
-        return title + " " + v;
-    }
-
-    /** 상품 대표 이름: 모델 규칙으로 묶이면 정리된 이름, 모델코드 · 상품명 키면 리스팅 원래 이름 */
-    private static String productName(ProductMatcher.Match match, String listingTitle) {
-        return match.key().startsWith("t:") || match.key().startsWith("code:") ? listingTitle : cut(match.name(), 255);
     }
 
     /** 마지막 기록과 가격이 같고 6시간이 안 지났으면 기록하지 않는다. 기록했으면 true */
@@ -335,7 +310,8 @@ public class CatalogRepository {
         return key.longValue();
     }
 
-    private static String nameOf(MallOffer o) {
+    /** 쇼핑몰 원래 상품명 (없으면 외부 상품 ID). products.product_name 의 첫 값으로도 쓴다 */
+    public static String listingTitle(MallOffer o) {
         String name = o.title() == null || o.title().isBlank() ? o.externalProductId() : o.title();
         return cut(name, 255);
     }

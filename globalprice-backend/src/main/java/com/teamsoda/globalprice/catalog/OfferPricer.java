@@ -3,6 +3,7 @@ package com.teamsoda.globalprice.catalog;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -13,6 +14,7 @@ import com.teamsoda.globalprice.catalog.MallDirectory.Mall;
 import com.teamsoda.globalprice.catalog.Offers.OfferData;
 import com.teamsoda.globalprice.catalog.Offers.PriceStatus;
 import com.teamsoda.globalprice.catalog.Offers.PricedOffer;
+import com.teamsoda.globalprice.catalog.Offers.ProductGroup;
 import com.teamsoda.globalprice.config.GlobalPriceProperties;
 import com.teamsoda.globalprice.pricing.PriceCalculator;
 import com.teamsoda.globalprice.pricing.PricingModels.Breakdown;
@@ -67,7 +69,7 @@ public class OfferPricer {
         try {
             Breakdown applied = PriceCalculator.calculate(in, ctx.fx(), ctx.rules(), ctx.now(), couponEnabled);
             PricingRules noEvents = new PricingRules(ctx.rules().shippingRules(), ctx.rules().taxRules(),
-                    ctx.rules().feeRules(), java.util.List.of(), ctx.rules().preferredFeeName());
+                    ctx.rules().feeRules(), List.of(), ctx.rules().preferredFeeName());
             Breakdown normal = PriceCalculator.calculate(in, ctx.fx(), noEvents, ctx.now(), false);
             if (applied.ruleMissing()) log.warn("ruleMissing: mall={} currency={}", d.mallId(), d.currency());
             boolean fresh = refreshedNow || (d.fetchedAt() != null
@@ -76,6 +78,30 @@ public class OfferPricer {
         } catch (RateUnavailableException e) {
             return new PricedOffer(d, null, null, PriceStatus.unavailable);
         }
+    }
+
+    /**
+     * DB 에서 읽은 offer 들을 상품별로 계산해 묶는다 (순서는 처음 나온 상품 순).
+     * 이상 가격 판정은 하지 않는다 → {@link OutlierService#judge}.
+     *
+     * @param refreshedMallProducts 이번 요청에서 방금 갱신한 mall_product_id (stale 판정 안 함)
+     */
+    public List<ProductGroup> groups(List<CatalogRepository.StoredOffer> stored, Context ctx, boolean couponEnabled,
+                                     java.util.Set<Long> refreshedMallProducts) {
+        Map<Long, List<CatalogRepository.StoredOffer>> byProduct = new java.util.LinkedHashMap<>();
+        for (CatalogRepository.StoredOffer s : stored) {
+            byProduct.computeIfAbsent(s.productId(), k -> new java.util.ArrayList<>()).add(s);
+        }
+        List<ProductGroup> out = new java.util.ArrayList<>();
+        byProduct.forEach((id, list) -> {
+            CatalogRepository.StoredOffer meta = list.getFirst();
+            List<PricedOffer> priced = list.stream()
+                    .map(s -> price(OfferData.of(s, ctx.countryOf(s.mallId())), ctx, couponEnabled,
+                            refreshedMallProducts.contains(s.mallProductId())))
+                    .toList();
+            out.add(new ProductGroup(id, meta.productName(), meta.imageUrl(), meta.matchKey(), priced));
+        });
+        return out;
     }
 
     /** 가격 이력에 남길 기본 계산값 (쿠폰 제외, SALE 은 적용). 계산 불가면 null */

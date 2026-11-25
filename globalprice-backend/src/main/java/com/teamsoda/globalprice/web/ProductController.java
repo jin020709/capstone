@@ -70,7 +70,7 @@ public class ProductController {
         return search.search(new SearchRequest(q, csv(stores, false), csv(countries, true), minPrice, maxPrice,
                 freeShipping || b.contains("freeship"), onSale || b.contains("event"), inStock,
                 b.contains("taxincluded"), coupon, SearchService.Sort.parse(sort), page, size),
-                new SearchService.FacetFilter(csv(brands, false), csv(models, false), csv(storages, false),
+                new com.teamsoda.globalprice.search.FacetBuilder.FacetFilter(csv(brands, false), csv(models, false), csv(storages, false),
                         csv(colors, false)));
     }
 
