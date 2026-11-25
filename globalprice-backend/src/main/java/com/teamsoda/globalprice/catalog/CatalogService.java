@@ -59,7 +59,7 @@ public class CatalogService {
     private OfferData saveOne(long mallId, MallOffer o, OfferPricer.Context ctx) {
         return tx.execute(status -> {
             CatalogRepository.SavedIds ids = repository.upsert(mallId, o, ctx.now());
-            OfferData data = OfferData.of(o, ids, mallId, ctx.now());
+            OfferData data = OfferData.of(o, ids, mallId, ctx.countryOf(mallId), ctx.now());
             repository.recordHistory(ids.mallVariantId(), o.price(), o.currencyCode(), pricer.historyTotal(data, ctx),
                     ctx.now(), HISTORY_MIN_GAP);
             return data;

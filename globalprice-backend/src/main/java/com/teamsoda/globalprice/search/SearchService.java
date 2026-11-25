@@ -191,7 +191,7 @@ public class SearchService {
 
         // 4. 묶기 → 필터 → 정렬
         List<ProductGroup> unsorted = familyOutliers(grouper.group(priced).stream()
-                .map(g -> new ProductGroup(g.productId(), g.productName(), g.imageUrl(), PriceOutliers.mark(g.offers())))
+                .map(g -> g.withOffers(PriceOutliers.mark(g.offers())))
                 .toList()).stream()
                 .map(g -> filterOffers(g, req, ctx))
                 .filter(g -> !g.offers().isEmpty())
@@ -205,7 +205,7 @@ public class SearchService {
 
         // 4-1. 상단 체크표: 체크 전 결과로 칸을 만들고, 체크한 값으로 거른다
         Map<Long, FacetInfo> infos = new HashMap<>();
-        for (ProductGroup g : all) infos.put(g.productId(), FacetInfo.of(g.productName()));
+        for (ProductGroup g : all) infos.put(g.productId(), FacetInfo.of(g));
         Facets facets = facets(all, infos);
         List<ProductGroup> groups = applyFacets(all, infos, facetFilter);
 
@@ -240,7 +240,7 @@ public class SearchService {
         Map<Long, String> seriesOf = new HashMap<>();
         Map<Long, Long> best = new HashMap<>();
         for (ProductGroup g : groups) {
-            String m0 = FacetInfo.of(g.productName()).model();
+            String m0 = FacetInfo.of(g).model();
             model.put(g.productId(), m0);
             // 제목에 용량이 없어 모델로 안 묶인 리스팅도 시리즈는 알아낸다 ("Galaxy Z Fold 5 5G F946 ...")
             ProductMatcher.Config qc = m0 != null ? null : ProductMatcher.queryConfig(g.productName());
@@ -259,7 +259,7 @@ public class SearchService {
                     .map(x -> best.get(x.productId())).toList();
             Long ref = PriceOutliers.familyReference(others);
             if (ref != null) {
-                out.add(new ProductGroup(g.productId(), g.productName(), g.imageUrl(), PriceOutliers.markBelow(g.offers(), ref)));
+                out.add(g.withOffers(PriceOutliers.markBelow(g.offers(), ref)));
                 continue;
             }
             // 다른 구성이 없으면 같은 시리즈(세대만 다름: Z Fold2 ~ Fold7)와 비교, 기준은 1/5 로 느슨하게
@@ -269,8 +269,8 @@ public class SearchService {
                             && s.equals(seriesOf.get(x.productId())))
                     .map(x -> best.get(x.productId())).filter(java.util.Objects::nonNull).toList();
             Long seriesRef = sameSeries.size() >= PriceOutliers.MIN_SERIES ? PriceOutliers.familyReference(sameSeries) : null;
-            out.add(seriesRef == null ? g : new ProductGroup(g.productId(), g.productName(), g.imageUrl(),
-                    PriceOutliers.markBelow(g.offers(), seriesRef, PriceOutliers.SERIES_RATIO)));
+            out.add(seriesRef == null ? g
+                    : g.withOffers(PriceOutliers.markBelow(g.offers(), seriesRef, PriceOutliers.SERIES_RATIO)));
         }
         return out;
     }
@@ -286,9 +286,10 @@ public class SearchService {
         private static final java.util.regex.Pattern TAIL = java.util.regex.Pattern.compile(
                 "(\\s\\d+\\s?(GB|TB))+(\\sWi-Fi.*)?$");
 
-        static FacetInfo of(String productName) {
-            ProductMatcher.Match m = ProductMatcher.match(productName);
-            ProductMatcher.Config c = m == null ? null : ProductMatcher.config(m.key());
+        /** 저장할 때 정한 묶기 키(products.match_key)로 판단 (상품명을 다시 해석하지 않음) */
+        static FacetInfo of(ProductGroup g) {
+            ProductMatcher.Config c = g.config();
+            String productName = g.productName();
             if (c == null) return new FacetInfo(null, null, null, null);
             String brand = switch (c.family().split("\\|")[0]) {
                 case "iphone", "ipad", "macbook" -> "Apple";
@@ -314,7 +315,7 @@ public class SearchService {
                 modelLabels.putIfAbsent(f.model(), f.modelLabel());
             }
             if (f.storageGb() != null) storages.computeIfAbsent(f.storageGb(), k -> new int[1])[0]++;
-            g.offers().stream().map(o -> ViewFactory.colorOf(o.data())).filter(java.util.Objects::nonNull).distinct()
+            g.offers().stream().map(o -> o.data().color()).filter(java.util.Objects::nonNull).distinct()
                     .forEach(c -> colors.computeIfAbsent(c, k -> new int[1])[0]++);
         }
         Comparator<FacetOption> byCount = Comparator.comparingInt(FacetOption::count).reversed();
@@ -342,11 +343,11 @@ public class SearchService {
             if (!f.storages().isEmpty() && (i.storageGb() == null || !f.storages().contains(String.valueOf(i.storageGb())))) continue;
             if (!f.colors().isEmpty()) {
                 List<PricedOffer> kept = g.offers().stream().filter(o -> {
-                    String c = ViewFactory.colorOf(o.data());
+                    String c = o.data().color();
                     return c != null && f.colors().contains(c.toLowerCase(Locale.ROOT));
                 }).toList();
                 if (kept.isEmpty()) continue;
-                g = new ProductGroup(g.productId(), g.productName(), g.imageUrl(), kept);
+                g = g.withOffers(kept);
             }
             out.add(g);
         }
@@ -362,8 +363,7 @@ public class SearchService {
             if (req.taxIncluded()) return false;   // 1차: 관부가세 포함가 판매처 없음
             if (!req.countries().isEmpty()) {
                 Mall mall = ctx.malls().get(o.data().mallId());
-                String country = com.teamsoda.globalprice.catalog.Origin.of(o.data().originCountry(),
-                        o.data().currency(), mall == null ? null : mall.countryCode());
+                String country = o.data().origin();
                 boolean krw = "KRW".equals(o.data().currency()) && mall != null
                         && "KR".equalsIgnoreCase(mall.countryCode());   // 국내 직구관만
                 if (!(krw && req.countries().contains("KRW"))
@@ -373,7 +373,7 @@ public class SearchService {
             }
             return true;
         }).toList();
-        return new ProductGroup(g.productId(), g.productName(), g.imageUrl(), kept);
+        return g.withOffers(kept);
     }
 
     private static boolean priceInRange(ProductGroup g, SearchRequest req) {
@@ -413,10 +413,7 @@ public class SearchService {
         List<String> qTokens = tokens(sourceQuery == null || sourceQuery.isBlank() ? rawQuery : sourceQuery);
         java.util.Map<Long, ProductMatcher.Config> cache = new java.util.HashMap<>();
         java.util.function.Function<ProductGroup, ProductMatcher.Config> conf = g -> cache.computeIfAbsent(g.productId(),
-                id -> {
-                    ProductMatcher.Match m = ProductMatcher.match(g.productName());
-                    return m == null ? null : ProductMatcher.config(m.key());
-                });
+                id -> g.config());
         java.util.Map<Long, Integer> rankCache = new java.util.HashMap<>();
         java.util.function.ToIntFunction<ProductGroup> rank = g -> rankCache.computeIfAbsent(g.productId(), id -> {
             ProductMatcher.Config c = conf.apply(g);

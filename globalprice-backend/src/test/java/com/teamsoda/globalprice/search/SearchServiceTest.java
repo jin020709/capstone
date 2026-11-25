@@ -122,9 +122,9 @@ class SearchServiceTest {
             List<OfferData> out = new ArrayList<>();
             for (MallSource.MallOffer o : offers) {
                 long id = ids.incrementAndGet();
-                out.add(new OfferData(id, o.title(), null, id, id, mallId, null, o.price(), o.currencyCode(),
-                        o.shippingFee(), o.originCountry(), "https://shop/" + id, o.stock(), o.shipDays(), NOW, null,
-                        o.title()));
+                // 실제 저장과 같은 팩토리 (출발국 · 색상 계산 포함)
+                out.add(OfferData.of(o, new com.teamsoda.globalprice.catalog.CatalogRepository.SavedIds(
+                        id, id, id, o.title(), null), mallId, malls.get(mallId).countryCode(), NOW));
             }
             return out;
         });

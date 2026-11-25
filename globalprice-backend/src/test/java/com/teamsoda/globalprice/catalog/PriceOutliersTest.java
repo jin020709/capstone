@@ -18,7 +18,8 @@ class PriceOutliersTest {
 
     private static PricedOffer offer(long id, long total, String title) {
         OfferData d = new OfferData(1, "Apple iPhone 17 Pro Max 256GB", null, id, id, 1, null, BigDecimal.ONE, "USD", null,
-                "US", "https://shop/" + id, StockStatus.IN_STOCK, null, LocalDateTime.of(2026, 11, 17, 12, 0), null, title);
+                "US", "https://shop/" + id, StockStatus.IN_STOCK, null, LocalDateTime.of(2026, 11, 17, 12, 0), null, title,
+                null, null);
         Breakdown b = new Breakdown(total, 0, 0, 0, 0, 0, total, null, true, true, null, null, null, null, false);
         return new PricedOffer(d, b, b, PriceStatus.ok);
     }

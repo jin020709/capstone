@@ -137,7 +137,7 @@ public class WatchedRefreshJob {
         for (Long id : productIds) {
             List<PricedOffer> priced = new ArrayList<>();
             for (StoredOffer s : current.getOrDefault(id, List.of())) {
-                priced.add(pricer.price(OfferData.of(s), after, false, false));
+                priced.add(pricer.price(OfferData.of(s, after.countryOf(s.mallId())), after, false, false));
             }
             Long best = priced.stream().filter(PricedOffer::comparable).map(PricedOffer::total)
                     .min(Long::compare).orElse(null);

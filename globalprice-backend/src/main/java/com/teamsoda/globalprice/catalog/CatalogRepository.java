@@ -38,15 +38,16 @@ public class CatalogRepository {
                               String currencyCode, BigDecimal shippingFee, LocalDateTime lastFetchedAt,
                               long mallVariantId, String externalVariantId, String variantName,
                               BigDecimal currentPrice, StockStatus stockStatus, LocalDateTime variantUpdatedAt,
-                              String listingTitle) {
+                              String listingTitle, String matchKey) {
         /** 마지막으로 가격을 받아온 시각 (last_fetched_at 이 없으면 옵션 updated_at) */
         public LocalDateTime fetchedAt() {
             return lastFetchedAt != null ? lastFetchedAt : variantUpdatedAt;
         }
     }
 
-    /** productName = 묶인 상품의 대표 이름 (판매처 줄에는 리스팅 원래 이름을 따로 씀) */
-    public record SavedIds(long productId, long mallProductId, long mallVariantId, String productName) {
+    /** productName · matchKey = 묶인 상품의 대표 이름 · 묶기 키 (판매처 줄에는 리스팅 원래 이름을 따로 씀) */
+    public record SavedIds(long productId, long mallProductId, long mallVariantId, String productName,
+                           String matchKey) {
     }
 
     public record DailyLowest(LocalDate date, long lowestTotalKrw) {
@@ -54,7 +55,7 @@ public class CatalogRepository {
 
     private static final String VIEW_SELECT = """
             SELECT p.product_id, p.product_name, p.image_url, p.description, p.model_number, p.category_id,
-                   b.brand_name, c.category_name,
+                   p.match_key, b.brand_name, c.category_name,
                    mp.mall_product_id, mp.mall_id, mp.external_product_id, mp.listing_title, mp.product_url,
                    mp.currency_code,
                    mp.shipping_fee, mp.last_fetched_at,
@@ -76,7 +77,7 @@ public class CatalogRepository {
             rs.getObject("last_fetched_at", LocalDateTime.class), rs.getLong("mall_variant_id"),
             rs.getString("external_variant_id"), rs.getString("variant_name"), rs.getBigDecimal("current_price"),
             stock(rs.getString("stock_status")), rs.getObject("updated_at", LocalDateTime.class),
-            rs.getString("listing_title"));
+            rs.getString("listing_title"), rs.getString("match_key"));
 
     private final JdbcTemplate jdbc;
     private final NamedParameterJdbcTemplate named;
@@ -138,9 +139,9 @@ public class CatalogRepository {
         Long mallVariantId = jdbc.queryForObject(
                 "SELECT mall_variant_id FROM mall_product_variants WHERE mall_product_id = ? AND external_variant_id = ?",
                 Long.class, mallProductId, variantId);
-        String productName = jdbc.queryForObject("SELECT product_name FROM products WHERE product_id = ?",
-                String.class, productId);
-        return new SavedIds(productId, mallProductId, mallVariantId, productName);
+        String[] product = jdbc.queryForObject("SELECT product_name, match_key FROM products WHERE product_id = ?",
+                (rs, i) -> new String[] { rs.getString(1), rs.getString(2) }, productId);
+        return new SavedIds(productId, mallProductId, mallVariantId, product[0], product[1]);
     }
 
     /** 처음 보는 리스팅의 상품: 같은 묶기 키의 상품이 있으면 그것, 없으면 새로 만든다 */

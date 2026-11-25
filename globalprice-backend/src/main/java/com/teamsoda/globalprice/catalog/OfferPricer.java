@@ -31,6 +31,11 @@ public class OfferPricer {
 
     /** 한 요청 동안 같은 규칙 · 환율 · 시각으로 계산하기 위한 묶음 */
     public record Context(FxTable fx, PricingRules rules, Map<Long, Mall> malls, LocalDateTime now) {
+        /** 쇼핑몰 나라 (shopping_malls.country_code, 모르면 null) */
+        public String countryOf(long mallId) {
+            Mall m = malls.get(mallId);
+            return m == null ? null : m.countryCode();
+        }
     }
 
     private final ExchangeRateService rates;
@@ -58,10 +63,7 @@ public class OfferPricer {
      * @param refreshedNow 이번 요청에서 쇼핑몰 API 로 방금 받은 값이면 true (stale 판정 안 함)
      */
     public PricedOffer price(OfferData d, Context ctx, boolean couponEnabled, boolean refreshedNow) {
-        Mall mall = ctx.malls().get(d.mallId());
-        PriceInput in = new PriceInput(d.price(), d.currency(), d.shippingFee(), d.mallId(),
-                Origin.of(d.originCountry(), d.currency(), mall == null ? null : mall.countryCode()),
-                mall == null ? null : mall.countryCode(), d.categoryId());
+        PriceInput in = input(d, ctx);
         try {
             Breakdown applied = PriceCalculator.calculate(in, ctx.fx(), ctx.rules(), ctx.now(), couponEnabled);
             PricingRules noEvents = new PricingRules(ctx.rules().shippingRules(), ctx.rules().taxRules(),
@@ -78,14 +80,16 @@ public class OfferPricer {
 
     /** 가격 이력에 남길 기본 계산값 (쿠폰 제외, SALE 은 적용). 계산 불가면 null */
     public Long historyTotal(OfferData d, Context ctx) {
-        Mall mall = ctx.malls().get(d.mallId());
-        PriceInput in = new PriceInput(d.price(), d.currency(), d.shippingFee(), d.mallId(),
-                Origin.of(d.originCountry(), d.currency(), mall == null ? null : mall.countryCode()),
-                mall == null ? null : mall.countryCode(), d.categoryId());
         try {
-            return PriceCalculator.calculate(in, ctx.fx(), ctx.rules(), ctx.now(), false).totalAmountKrw();
+            return PriceCalculator.calculate(input(d, ctx), ctx.fx(), ctx.rules(), ctx.now(), false).totalAmountKrw();
         } catch (RateUnavailableException e) {
             return null;
         }
+    }
+
+    /** 출발국은 OfferData 를 만들 때 정해 둔 값을 그대로 쓴다 */
+    private static PriceInput input(OfferData d, Context ctx) {
+        return new PriceInput(d.price(), d.currency(), d.shippingFee(), d.mallId(), d.origin(),
+                ctx.countryOf(d.mallId()), d.categoryId());
     }
 }

@@ -114,7 +114,8 @@ public class ProductService {
         Long familyRef = PriceOutliers.familyReference(cfg.stream().filter(c -> !c.current())
                 .map(ConfigView::bestTotal).toList());
         List<PricedOffer> priced = PriceOutliers.markBelow(PriceOutliers.mark(stored.stream()
-                .map(s -> pricer.price(OfferData.of(s), ctx, coupon, refreshed.contains(s.mallProductId())))
+                .map(s -> pricer.price(OfferData.of(s, ctx.countryOf(s.mallId())), ctx, coupon,
+                        refreshed.contains(s.mallProductId())))
                 .toList()), familyRef).stream().sorted(ViewFactory.OFFER_ORDER).toList();
         StoredOffer meta = stored.getFirst();
         List<String> extra = new ArrayList<>();
@@ -122,7 +123,8 @@ public class ProductService {
                 .min(Long::compare).orElse(null);
         Long low30 = repository.lowestBetween(productId, ctx.now().minusDays(30), ctx.now().plusSeconds(1));
         if (currentBest != null && low30 != null && currentBest <= low30) extra.add(ViewFactory.BADGE_LOW_30D);
-        ProductSummary s = views.summary(new ProductGroup(productId, meta.productName(), meta.imageUrl(), priced),
+        ProductSummary s = views.summary(
+                new ProductGroup(productId, meta.productName(), meta.imageUrl(), meta.matchKey(), priced),
                 ctx, extra, meta, Integer.MAX_VALUE);
 
         Set<Long> mallIds = stored.stream().map(StoredOffer::mallId).collect(Collectors.toSet());
@@ -250,9 +252,11 @@ public class ProductService {
             List<StoredOffer> list = byProduct.get(id);
             if (list == null || list.isEmpty()) continue;
             List<PricedOffer> priced = PriceOutliers.mark(
-                    list.stream().map(s -> pricer.price(OfferData.of(s), ctx, false, false)).toList());
+                    list.stream().map(s -> pricer.price(OfferData.of(s, ctx.countryOf(s.mallId())), ctx, false, false))
+                            .toList());
             StoredOffer meta = list.getFirst();
-            out.add(views.summary(new ProductGroup(id, meta.productName(), meta.imageUrl(), priced), ctx, null, meta, 3));
+            out.add(views.summary(new ProductGroup(id, meta.productName(), meta.imageUrl(), meta.matchKey(), priced),
+                    ctx, null, meta, 3));
         }
         return out;
     }
