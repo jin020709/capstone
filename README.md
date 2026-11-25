@@ -223,7 +223,7 @@ cd globalprice-backend
 ./gradlew bootRun              # Mac · Linux
 ```
 
-Eclipse에서는 `File → Import → Gradle → Existing Gradle Project`로 `globalprice-backend`를 가져온 뒤, `GlobalPriceApplication`을 `Run As → Java Application`으로 실행해도 됩니다.
+Eclipse에서는 `File → Import → Gradle → Existing Gradle Project`로 `globalprice-backend`를 가져온 뒤, **Gradle Tasks 창의 `application → bootRun`** 으로 실행합니다. (화면 파일은 Gradle 빌드가 `GlobalPrice_frontend`에서 복사하므로, `Run As → Java Application`으로 바로 실행하면 화면이 안 나올 수 있어요.)
 
 ### 6-4. 접속
 브라우저에서 http://localhost:8080 을 엽니다. 화면과 API를 같은 서버에서 제공합니다.
@@ -267,7 +267,7 @@ globalprice-main
 └─ README.md
 ```
 
-> 백엔드의 `src/main/resources/static/` 은 `GlobalPrice_frontend/static/` 의 **복사본**입니다. 프론트 원본을 고치면 백엔드 쪽에도 다시 복사해 주세요. (다른 점은 `js/config.js`의 `USE_MOCK: false` 한 줄뿐입니다.)
+> 화면 파일은 `GlobalPrice_frontend/static/` 한 곳에만 있습니다. 서버를 빌드할 때 Gradle이 백엔드로 복사하면서 `js/config.js`의 `USE_MOCK`만 `false`로 바꿔요. 프론트를 고친 뒤 따로 복사할 필요 없이 서버만 다시 켜면 됩니다.
 
 <br>
 

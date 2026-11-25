@@ -83,8 +83,8 @@ GET /api/products?q=아이폰 17
 | source | `MallSource` 인터페이스, ebay / shopify / aliexpress / etsy 구현, 호출 예산 · 쿨다운(SourceGuard) |
 | rate | 수출입은행 클라이언트 · 환율 서비스 |
 | pricing | `PriceCalculator` (순수 함수) · 규칙 조회 |
-| catalog | 상품 저장(upsert) · 묶기(`ProductMatcher` · `ModelCode`) · 출발국(`Origin`) · 이상 가격(`PriceOutliers`) · 색상(`ColorName`) · 상세 · 가격 이력 · 응답 모양(Views) |
-| search | 검색 서비스 · 별칭 · 걸러내기(`ResultFilter`) · `SameProductGrouper` · 관련도 정렬 · 체크표 · 소스 호출(SourceCaller) |
+| catalog | 상품 저장 흐름(`CatalogService`) · SQL(`CatalogRepository`) · 묶기 판단(`ProductGrouping` · `ProductMatcher` · `ModelCode`) · 이상 가격(`OutlierService` · `PriceOutliers`) · 출발국(`Origin`) · 색상(`ColorName`) · 계산(`OfferPricer`) · 상세 · 가격 이력 · 응답 모양(Views) |
+| search | 검색 흐름(`SearchService`) · 관련도 정렬(`SearchRanker`) · 체크표(`FacetBuilder`) · 별칭(`QueryNormalizer` · `AliasRepository`) · 걸러내기(`ResultFilter`) · `SameProductGrouper` · 소스 호출(SourceCaller) |
 | wishlist / alert | 관심 상품, 알림 조건 · 판정 · 받은 알림 (JPA) |
 | scheduler / web | 스케줄 작업, `@RestController` |
 
@@ -100,6 +100,7 @@ GET /api/products?q=아이폰 17
 | JDK | Gradle foojay resolver 로 JDK 25 자동 다운로드 |
 
 계층: Controller → Service → Repository. 외부 HTTP는 `source`와 `rate`만 호출한다. `PriceCalculator`는 DB · 시간 · 네트워크에 의존하지 않는다.
+offer 의 출발국 · 색상 · 묶기 키는 `OfferData`를 만들 때 한 번만 정하고 계산 · 화면 · 필터가 그 값을 쓴다 (곳곳에서 따로 계산하지 않음).
 
 ---
 
@@ -180,6 +181,8 @@ interface MallSource {
 
 ### 4-3. 저장 규칙 (검색 결과 → DB)
 
+흐름은 `CatalogService`, 리스팅을 어느 상품에 붙일지는 `ProductGrouping`, SQL은 `CatalogRepository`(`ProductGrouping.Store` 구현)가 맡는다.
+
 1. `mall_products`를 `(mall_id, external_product_id)`로 조회.
    - 없으면 묶기 키(4-5)로 `products`를 찾고, 없으면 새로 만든 뒤 `mall_products` 1행을 붙인다. `listing_title`에 쇼핑몰 원래 상품명을 저장.
    - 있으면 `listing_title` · URL · 통화 · 배송비 · `last_fetched_at` 갱신. 지금 상품명으로 만든 묶기 키가 상품의 키와 다르면 맞는 상품으로 옮긴다 (예전 1 리스팅 = 1 상품 데이터도 다시 검색되면 합쳐짐).
@@ -223,13 +226,16 @@ interface MallSource {
 - **모델코드** (`ModelCode`): 영문 + 숫자 5~20자, 숫자 3개 이상 (또는 6자 이상 · 숫자 2개 · 영문 3개). `256GB` · `240Hz` 같은 단위와 `iPhone17` 같은 제품 이름은 제외. 비교 시 대소문자 · 하이픈 · 공백 무시 (`SM-S938B` = `sms938b`).
 - **다른 구성**: 키에서 용량을 뺀 부분(family, 예 `iphone|17 pro`)이 같은 상품들. 상세 `configs`로 내려준다.
 
-### 4-6. 이상 가격 (`PriceOutliers`)
+### 4-6. 이상 가격 (`OutlierService`)
 
 걸린 판매처는 지우지 않고 `status: "suspicious"`로 표시해 **최저가 · 정렬 · 비교에서만 뺀다** (품절과 같은 방식).
+**검색 · 상세 · 찜 목록 · 가격 알림 판정이 모두 같은 규칙**을 쓴다 (목표가 알림이 할부 표기 · 터무니없이 싼 리스팅 때문에 잘못 가지 않음).
 
-1. 할부 · 계약금 표기: 상품명에 `installment`, `monthly`, `/mo`, `deposit`, `down payment`, `할부`, `월 납`, `계약금`, `分期` 등이 있으면 일시불 총액이 아님.
-2. 같은 상품에 비교 가능한 판매처가 3곳 이상이면, 중간값의 1/3보다 싼 판매처.
-3. 판매처가 1~2곳뿐이면: 같은 모델 다른 구성(용량만 다름)이 2개 이상일 때 그 최저가들의 중간값 1/3보다 싸면. 다른 구성이 없으면 같은 시리즈(세대만 다름, 예 Z Fold2~7)가 3개 이상일 때 중간값의 1/5보다 싸면.
+1. 상품 안
+   - 할부 · 계약금 표기: 상품명에 `application.yml`의 `globalprice.outliers.installment-keywords`(installment, monthly, /mo, deposit, 할부, 계약금, 分期 …)가 있으면 일시불 총액이 아님.
+   - 비교 가능한 판매처가 3곳 이상이면, 중간값의 1/3보다 싼 판매처.
+2. 같은 모델 다른 구성(용량만 다름, 묶기 키의 family 가 같음)이 2개 이상이면 그 최저가들의 중간값 1/3보다 싼 판매처. 비교 대상은 **DB 에 저장된 같은 모델 상품 + 지금 판정하는 상품들** (저장값은 쿠폰 제외 · 1단계 판정 후 최저가).
+3. 다른 구성이 없으면 같은 시리즈(세대만 다름, 예 Z Fold2~7, 모델이 확실한 상품 3개 이상)의 중간값 1/5보다 싼 판매처. 비교 대상은 **지금 판정하는 상품들끼리만** (같은 검색 결과 · 같은 찜 목록). DB 전체와 비교하면 "아이폰 17 케이스" 검색의 케이스가 저장된 아이폰 본품 가격과 비교돼 전부 이상 가격이 된다.
 
 ---
 
@@ -284,7 +290,7 @@ DB 규칙 · 환율 · offer만 입력으로 받는 순수 함수. 모든 금액
 - 인증은 세션 쿠키 `JSESSIONID`. 프론트는 `credentials: 'same-origin'`으로 요청하고 토큰 · `Authorization` 헤더는 쓰지 않는다. 로그인 상태는 페이지가 열릴 때 `GET /api/auth/me`로 확인 (브라우저의 `gp_user`는 표시용 캐시).
 - 페이지: `page`(0부터) · `size`(1~50, 기본 20).
 - 프론트 요청 제한 시간 8초 (`TIMEOUT_MS`). 넘으면 "응답이 늦어요" 안내.
-- 프론트 목업: `js/config.js`의 `USE_MOCK: true`면 `js/mock-data.js`로 동작 (백엔드 없이). 백엔드 `static/`은 `USE_MOCK: false`인 복사본.
+- 프론트 목업: `js/config.js`의 `USE_MOCK: true`면 `js/mock-data.js`로 동작 (백엔드 없이). 서버는 빌드할 때 Gradle(`processResources`)이 `GlobalPrice_frontend/static`을 `static/`으로 복사하면서 `USE_MOCK`만 `false`로 바꿔 서비스한다 (복사본을 손으로 맞추지 않음).
 
 ### 6-1. 오류 응답
 
@@ -360,7 +366,7 @@ DB 규칙 · 환율 · offer만 입력으로 받는 순수 함수. 모든 금액
   - 액세서리 · 부품: case · cover · protector · charger · cable · stand · mount · pouch · repair · keycap · band 등 약 80개 (영 · 독 · 프 · 스페인어 · 한글)
   - 박스만 파는 리스팅 ("box only", "empty box", "박스만")
   - 시계를 검색했는데 밴드 · 루프 · 스트랩만 파는 리스팅
-  - 미국 통신사 잠김 폰 (AT&T · Verizon · T-Mobile 등, "Unlocked"가 같이 있으면 통과)
+  - 미국 통신사 잠김 폰 (AT&T · Verizon · T-Mobile 등, "Unlocked"가 같이 있으면 통과). 목록은 `carrier-keywords` · `unlocked-keywords`, 시계 밴드는 `watch-band-keywords` (정규식)
   - "for iPhone" 같은 호환 표기, 검색어 첫 단어(브랜드) 앞에 for · compatible with · fits가 붙은 표기 ("Stand for Sony ...")
 
 **ProductSummary** (검색 · 찜 목록의 상품 1건)
@@ -424,6 +430,7 @@ DB 규칙 · 환율 · offer만 입력으로 받는 순수 함수. 모든 금액
 ```
 - `offers` · `variants`: 전체 판매처 (같은 내용).
 - `priceStatus`: `ok` · `stale` · `unavailable`. `wished`: 로그인 시 찜 여부, 아니면 null.
+- `colors`: 색상별 최저가 `[{name, bestTotal, offerCount}]` (비교 가능한 판매처 기준, 싼 색상부터, 색상이 2개 이상일 때만). 검색 결과 `colors`와 같은 계산. 화면은 이 값으로 색상 칩을 그리고, 칩을 고르면 `offers[].color`로 판매처를 거른다.
 - `events`: 그 상품 판매처의 활성 · 진행 중 · 예정 행사.
 - `configs`: 같은 모델의 다른 구성(용량 · 메모리 · 통신 방식, 4-5). `current`는 지금 보는 상품, `storageGb`는 GB당 가격 계산용. 구성이 하나뿐이거나 모르는 상품이면 빈 배열. 다른 구성 최저가는 판매처 1~2곳 상품의 이상 가격 판정 기준에도 쓴다.
 - 상단 "사이트별 가격 한눈에" 그래프는 `offers[].calc`로 그린다 (별도 API 없음).
@@ -477,7 +484,7 @@ BCrypt, 로그인 성공 시 세션 ID 재발급(`request.changeSessionId()`), �
 | POST `/api/wishlist` | `{productId}` | 201 새로 추가 / 200 이미 있음 (멱등) |
 | DELETE `/api/wishlist/{productId}` | — | 204 (없어도 204) |
 
-찜 목록 가격은 저장된 최신값으로 계산한다 (외부 호출 없음). 묶기로 상품이 합쳐지면 찜은 합쳐진 상품으로 옮겨진다.
+찜 목록 가격은 저장된 최신값으로 계산한다 (외부 호출 없음, 이상 가격은 4-6 같은 규칙). 묶기로 상품이 합쳐지면 찜은 합쳐진 상품으로 옮겨진다.
 
 ### 6-9. 가격 알림 (로그인 필요)
 
@@ -524,7 +531,7 @@ DB `chk_alert_target`과 같은 조합. 어기면 400.
 
 | alertBasis | 조건 |
 | --- | --- |
-| TARGET_PRICE | 현재 예상 구매비용(쿠폰 제외 · 품절 제외 최저) ≤ `target_price_krw` |
+| TARGET_PRICE | 현재 예상 구매비용(쿠폰 제외 · 품절 · 이상 가격 제외 최저) ≤ `target_price_krw` |
 | PERIOD_LOWEST | 현재 예상 구매비용 < 갱신 전 최근 30일 `price_history` 최저 |
 | EVENT_START | 행사 `start_at` 날짜가 오늘(KST)이고 활성 |
 | COUPON_EXPIRY | COUPON 행사의 `end_at` 날짜가 내일(KST) |
@@ -548,7 +555,10 @@ DB `chk_alert_target`과 같은 조합. 어기면 400.
 
 키 · DB 비밀번호는 OS 사용자 환경 변수로 한 번 등록한다 (Windows: PowerShell `[Environment]::SetEnvironmentVariable("이름", "값", "User")`, Mac: `~/.zshrc`에 `export`). 등록 후 열려 있던 터미널 · IDE는 다시 켠다.
 
-그 밖의 값은 `application.yml`의 `globalprice.*`: 소스당 가져올 개수 20, 캐시 10분 · 500건, 타임아웃(연결 2초 · 읽기 3초 · 상세 갱신 3초), 429 쉬기 10분, stale 기준 6시간, 하루 예산 3,000, 걸러내기 키워드, 홈 인기 검색어, 수수료 규칙 이름.
+그 밖의 값은 `application.yml`의 `globalprice.*`: 소스당 가져올 개수 20, 캐시 10분 · 500건, 타임아웃(연결 2초 · 읽기 3초 · 상세 갱신 3초), 429 쉬기 10분, stale 기준 6시간, 하루 예산 3,000, 홈 인기 검색어, 수수료 규칙 이름, 그리고 코드에 두지 않는 목록:
+- `globalprice.filter`: 새 상품 아님 · 액세서리 키워드, 통신사 잠김 · 언락 · 시계 밴드 (정규식)
+- `globalprice.outliers.installment-keywords`: 할부 · 계약금 표기 (정규식)
+- `globalprice.display.platform-domains`: 쇼핑몰 자체 도메인 (상품 링크가 여기 속하면 판매자 도메인 `seller`를 null 로)
 
 ---
 
@@ -582,7 +592,7 @@ gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 
 | 검색 서비스 | 가짜 소스 3개: 일부 실패 200, 전부 실패 503 · 502, 캐시 히트 시 외부 호출 0회, 걸러내기 · 정렬 · 필터 · 페이지 · 예산 · 쿨다운, 관련도(`RelevanceTest`), 체크표(`FacetTest`) |
 | 통합 (실제 MySQL) | API 전체 흐름, 시드 금액, 저장 멱등 · 이력 중복 방지, stale 표시, 관심 상품 갱신 → 알림 · 하루 1회, 행사 알림 |
 
-현재 126개 (통합 9개는 DB 없으면 건너뜀). **실패 1개**: `SearchServiceTest.partialFailure_returns200WithSourceStatuses` — 관련도 정렬 도입 후 순서 기대값을 고치지 않음 (13장 기본 정렬 결정 후 정리).
+현재 141개 (통합 10개는 DB 없으면 건너뜀). 묶기 판단은 메모리 Store 로(`ProductGroupingTest`), 키워드 목록은 실제 `application.yml`을 읽어서(`support/RealConfig`) 확인한다. **실패 1개**: `SearchServiceTest.partialFailure_returns200WithSourceStatuses` — 관련도 정렬 도입 후 순서 기대값을 고치지 않음 (13장 기본 정렬 결정 후 정리).
 
 ---
 
@@ -640,7 +650,7 @@ gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 
 | 11 | 호출 한도 | `daily-budget` 3,000 (eBay · Etsy 실제 한도 하루 5,000) |
 | 12 | 응답 시간 | 캐시 미스 약 1.3~2.8초(실측), 캐시 히트 약 0.1초. "p95 1초"는 캐시 히트에만 적용 가능 |
 | 13 | AliExpress 해외 창고 | 출발국 CN 고정이라 해외 창고(미국 등) 발송 상품도 $150 한도로 계산됨 (비용을 낮게 잡는 쪽은 아님) |
-| 14 | 프론트 복사본 동기화 | 백엔드 `static/`은 `GlobalPrice_frontend/static/` 복사본 (`USE_MOCK`만 다름). 원본 수정 시 다시 복사 |
+| 14 | Eclipse 실행 | 화면 파일은 Gradle 빌드가 복사하므로 Eclipse 에서 바로 실행하면 화면이 안 나올 수 있음 → `gradlew bootRun` 또는 Gradle Tasks 의 `bootRun` 으로 실행 |
 
 ---
 
@@ -653,3 +663,4 @@ gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 
 | 2026-11-18 ~ 20 | 같은 상품 묶기(`match_key` · `listing_title`, 마이그레이션 002~004), 다른 구성 · 체크표 · 색상별 최저가, 이상 가격(`suspicious`), 모델코드 일치, 관련도 정렬, 출발국 통화 추정(`Origin`), 걸러내기 보강(통신사 잠김 · 박스만 · 시계 밴드 · for 브랜드 · 키워드 확대 · 복수형), 별칭 19개 추가, 상세 갱신 최대 6곳 |
 | 2026-11-22 | AliExpress 출발국 CN 고정 (USD라서 미국 $200 한도로 계산되던 문제). 명세 문서를 이 파일 하나로 통합 (v1.1 docx · 프론트 `API_SPEC.md` 두 벌 삭제) |
 | 2026-11-26 | 검색어 별칭을 `aliases.csv` 대신 DB `search_aliases`에서 읽음 (10분마다 갱신), `aliases.csv` 삭제. 08 마이그레이션: `alias_source` 컬럼 + 별칭 약 180개. 한글 "핸드폰 케이스" · "아이폰 17 케이스" 검색에 케이스가 안 나오던 문제 해결 |
+| 2026-11-26 | 구조 정리: 상세 500(match_key NULL NPE) 수정, 출발국 · 색상 · 묶기 키를 OfferData 에서 한 번만 계산, SearchService 를 SearchRanker · FacetBuilder 로 분리, 묶기 판단을 ProductGrouping 으로, 이상 가격을 OutlierService 하나로 (찜 목록 · 알림 판정도 같은 규칙), 하드코딩 목록을 application.yml 로, 프론트 static 복사본을 Gradle 자동 복사로, 상세 `colors` 추가(프론트 색상 판단 코드 삭제) |
