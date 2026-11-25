@@ -17,7 +17,9 @@ public record GlobalPriceProperties(
         @DefaultValue Pricing pricing,
         @DefaultValue Home home,
         @DefaultValue Filter filter,
-        @DefaultValue Sources sources) {
+        @DefaultValue Sources sources,
+        @DefaultValue Outliers outliers,
+        @DefaultValue Display display) {
 
     public record Search(
             @DefaultValue("20") int perSourceLimit,
@@ -36,7 +38,23 @@ public record GlobalPriceProperties(
     public record Home(@DefaultValue List<String> hotKeywords) {
     }
 
-    public record Filter(@DefaultValue List<String> notNewKeywords, @DefaultValue List<String> accessoryKeywords) {
+    /**
+     * 걸러내기 (ResultFilter) 키워드. 영문은 단어 경계로 비교한다.
+     *
+     * @param carrierKeywords   미국 통신사 잠김 폰 표기 (unlockedKeywords 가 같이 있으면 통과)
+     * @param watchBandKeywords 시계를 검색했을 때 밴드만 파는 리스팅
+     */
+    public record Filter(@DefaultValue List<String> notNewKeywords, @DefaultValue List<String> accessoryKeywords,
+                         @DefaultValue List<String> carrierKeywords, @DefaultValue List<String> unlockedKeywords,
+                         @DefaultValue List<String> watchBandKeywords) {
+    }
+
+    /** 이상 가격 (OutlierService): 상품명에 있으면 일시불 총액이 아닌 할부 · 계약금 표기 */
+    public record Outliers(@DefaultValue List<String> installmentKeywords) {
+    }
+
+    /** 화면 표시: 쇼핑몰 자체 도메인 (상품 링크가 이 도메인이면 판매자 도메인을 따로 보여 주지 않음) */
+    public record Display(@DefaultValue List<String> platformDomains) {
     }
 
     public record Sources(

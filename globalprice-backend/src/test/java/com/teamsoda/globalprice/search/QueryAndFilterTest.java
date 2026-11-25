@@ -13,8 +13,8 @@ import com.teamsoda.globalprice.source.MallSource.StockStatus;
 class QueryAndFilterTest {
 
     QueryNormalizer normalizer = new QueryNormalizer(SeedAliases.load());   // 실제 별칭 데이터 (05 · 08 마이그레이션)
-    ResultFilter filter = new ResultFilter(List.of("used", "refurbished", "for parts", "salvage", "as-is", "중고", "리퍼"),
-            List.of("case", "cover", "protector", "screen protector", "charger", "케이스", "필름"));
+    ResultFilter filter = new ResultFilter(com.teamsoda.globalprice.support.RealConfig.filter(List.of("used", "refurbished", "for parts", "salvage", "as-is", "중고", "리퍼"),
+            List.of("case", "cover", "protector", "screen protector", "charger", "케이스", "필름")));
 
     @Test
     void normalize_trimsAndTranslates() {
@@ -106,7 +106,7 @@ class QueryAndFilterTest {
 
     @Test
     void filter_dropsCarrierLockedPhones() {   // 11/18 실제: eBay $950 "(AT&T) with Apple Airpods pro" 가 512GB 최저가로 뜸
-        ResultFilter f = new ResultFilter(List.of("used"), List.of("case"));
+        ResultFilter f = new ResultFilter(com.teamsoda.globalprice.support.RealConfig.filter(List.of("used"), List.of("case")));
         assertThat(f.accept(o("Apple iPhone 17 Pro Max - 512 GB - Deep Blue (AT&T) with Apple Airpods pro", "NEW"), "iphone 17 pro max")).isFalse();
         assertThat(f.accept(o("iPhone 17 Pro 256GB Verizon", "NEW"), "iphone 17 pro")).isFalse();
         assertThat(f.accept(o("iPhone 17 Pro 256GB Unlocked (works with AT&T, T-Mobile)", "NEW"), "iphone 17 pro")).isTrue();
@@ -116,8 +116,8 @@ class QueryAndFilterTest {
 
     @Test
     void filter_dropsAliExpressEtsyAccessories() {   // 11/18 실제 AliExpress · Etsy 결과
-        ResultFilter f = new ResultFilter(List.of("used"), List.of("case", "cover", "stand", "bag", "shell", "repair kit",
-                "hinge", "cleaner", "brush", "keycap", "puller", "keychain", "attachment", "slimcase", "handytasche"));
+        ResultFilter f = new ResultFilter(com.teamsoda.globalprice.support.RealConfig.filter(List.of("used"), List.of("case", "cover", "stand", "bag", "shell", "repair kit",
+                "hinge", "cleaner", "brush", "keycap", "puller", "keychain", "attachment", "slimcase", "handytasche")));
         assertThat(f.accept(o("Airpod Pro 3 Cases, Poke Characters Earphone Cases", "NEW"), "airpods pro 3")).isFalse();
         assertThat(f.accept(o("5 in 1 Earphone Cleaner Brush Kit", "NEW"), "airpods pro 3")).isFalse();
         assertThat(f.accept(o("Brand For Anker Charging Base, 100W Fast Charging", "NEW"), "anker power bank")).isFalse();

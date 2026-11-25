@@ -133,9 +133,9 @@ class SearchServiceTest {
                 mock(SyncLogRepository.class), new AppConfig().cacheManager(props), clock, props);
         // 이상 가격 비교용 DB 상품은 없음 (가짜 Repository 는 빈 결과)
         com.teamsoda.globalprice.catalog.OutlierService outliers = new com.teamsoda.globalprice.catalog.OutlierService(
-                mock(com.teamsoda.globalprice.catalog.CatalogRepository.class), pricer);
+                mock(com.teamsoda.globalprice.catalog.CatalogRepository.class), pricer, props);
         service = new SearchService(new QueryNormalizer(Map.of("아이폰", "iphone")), directory, caller, pricer,
-                new SameProductGrouper(), outliers, new ViewFactory(directory), props);
+                new SameProductGrouper(), outliers, new ViewFactory(directory, props), props);
     }
 
     static MallSource.MallOffer offer(String id, String title, String usd, String shipping,

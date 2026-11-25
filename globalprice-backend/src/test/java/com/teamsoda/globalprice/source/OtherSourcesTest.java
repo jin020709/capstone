@@ -146,7 +146,8 @@ class OtherSourcesTest {
         GlobalPriceProperties noTracking = new GlobalPriceProperties(props.zone(), props.search(), props.pricing(),
                 props.home(), props.filter(), new GlobalPriceProperties.Sources(props.sources().ebay(),
                         props.sources().shopify(), new GlobalPriceProperties.AliExpress(true, "key", "secret", "", 3000,
-                                http.baseUrl() + "/sync"), props.sources().etsy(), props.sources().koreaexim()));
+                                http.baseUrl() + "/sync"), props.sources().etsy(), props.sources().koreaexim()),
+                props.outliers(), props.display());
         AliExpressSource s = new AliExpressSource(noTracking, TestProps.rest(noTracking), TestProps.MAPPER,
                 Clock.systemUTC());
         assertThat(s.enabled()).isTrue();   // tracking_id 없이도 동작

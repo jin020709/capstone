@@ -7,8 +7,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
+
+import com.teamsoda.globalprice.config.GlobalPriceProperties;
 
 import com.teamsoda.globalprice.catalog.Offers.PricedOffer;
 import com.teamsoda.globalprice.catalog.Offers.ProductGroup;
@@ -43,15 +46,17 @@ public class OutlierService {
 
     private final CatalogRepository repository;
     private final OfferPricer pricer;
+    private final Pattern installment;
 
-    public OutlierService(CatalogRepository repository, OfferPricer pricer) {
+    public OutlierService(CatalogRepository repository, OfferPricer pricer, GlobalPriceProperties props) {
         this.repository = repository;
         this.pricer = pricer;
+        this.installment = PriceOutliers.installmentPattern(props.outliers().installmentKeywords());
     }
 
     /** groups 의 이상 가격을 status=suspicious 로 표시한 새 목록 (순서 유지) */
     public List<ProductGroup> judge(List<ProductGroup> groups, OfferPricer.Context ctx) {
-        List<ProductGroup> marked = groups.stream().map(g -> g.withOffers(PriceOutliers.mark(g.offers()))).toList();
+        List<ProductGroup> marked = groups.stream().map(this::markWithin).toList();
         Map<Long, Member> pool = new LinkedHashMap<>();
         // 같은 모델 다른 구성
         Set<String> families = new java.util.LinkedHashSet<>();
@@ -111,7 +116,12 @@ public class OutlierService {
         Map<Long, String> keys = repository.productsByKeyPrefix(keyPrefix, limit);
         if (keys.isEmpty()) return List.of();
         return pricer.groups(repository.findByProductIds(keys.keySet()), ctx, false, Set.of()).stream()
-                .map(g -> member(g.withOffers(PriceOutliers.mark(g.offers())))).toList();
+                .map(g -> member(markWithin(g))).toList();
+    }
+
+    /** 1단계: 상품 안 판정 (할부 표기 · 판매처 중간값) */
+    private ProductGroup markWithin(ProductGroup g) {
+        return g.withOffers(PriceOutliers.mark(g.offers(), installment));
     }
 
     static Member member(ProductGroup g) {

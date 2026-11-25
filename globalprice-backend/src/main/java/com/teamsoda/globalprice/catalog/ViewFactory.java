@@ -39,9 +39,12 @@ public class ViewFactory {
     public static final String BADGE_LOW_30D = "최근 30일 최저";
 
     private final MallDirectory malls;
+    private final List<String> platformDomains;
 
-    public ViewFactory(MallDirectory malls) {
+    public ViewFactory(MallDirectory malls, com.teamsoda.globalprice.config.GlobalPriceProperties props) {
         this.malls = malls;
+        this.platformDomains = props.display().platformDomains().stream()
+                .map(d -> d.toLowerCase(Locale.ROOT)).toList();
     }
 
     /** 순서: 비교 대상(예상 구매비용 → shipDays → 쇼핑몰 이름) → 품절 → 이상 가격 → 조회 불가 */
@@ -106,16 +109,18 @@ public class ViewFactory {
                 .sorted(java.util.Comparator.comparingLong(Views.ColorView::bestTotal)).toList();
     }
 
-    /** 상품 링크의 도메인 (www. 제외). 쇼핑몰 자체 도메인이면 null → 판매처 이름만 표시 */
-    static String seller(String url) {
+    /**
+     * 상품 링크의 도메인 (www. 제외). 쇼핑몰 자체 도메인(application.yml globalprice.display.platform-domains)이면
+     * null → 판매처 이름만 표시
+     */
+    String seller(String url) {
         if (url == null) return null;
         try {
             String host = java.net.URI.create(url.strip()).getHost();
             if (host == null) return null;
             host = host.toLowerCase(Locale.ROOT);
             if (host.startsWith("www.")) host = host.substring(4);
-            for (String own : new String[] { "ebay.", "aliexpress.", "etsy.com", "amazon.", "rakuten.", "shopify.com",
-                    "shop.app" }) {
+            for (String own : platformDomains) {
                 if (host.contains(own)) return null;
             }
             return host;

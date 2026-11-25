@@ -16,6 +16,10 @@ import com.teamsoda.globalprice.source.MallSource.StockStatus;
 
 class PriceOutliersTest {
 
+    /** 실제 application.yml 의 할부 · 계약금 표기 목록 */
+    static final java.util.regex.Pattern INSTALLMENT = PriceOutliers.installmentPattern(
+            com.teamsoda.globalprice.support.RealConfig.outliers().installmentKeywords());
+
     private static PricedOffer offer(long id, long total, String title) {
         OfferData d = new OfferData(1, "Apple iPhone 17 Pro Max 256GB", null, id, id, 1, null, BigDecimal.ONE, "USD", null,
                 "US", "https://shop/" + id, StockStatus.IN_STOCK, null, LocalDateTime.of(2026, 11, 17, 12, 0), null, title,
@@ -30,7 +34,7 @@ class PriceOutliersTest {
                 offer(1, 83_047, "Apple iPhone 17 Pro Max - 6.9\" - 256GB - Cosmic Orange"),
                 offer(2, 1_876_488, "Apple iPhone 17 Pro Max 256GB"),
                 offer(3, 1_914_343, "iPhone 17 pro max - 256GB - Cosmic Orange"),
-                offer(4, 1_929_466, "Apple iPhone 17 Pro Max 256GB Dual SIM")));
+                offer(4, 1_929_466, "Apple iPhone 17 Pro Max 256GB Dual SIM")), INSTALLMENT);
         assertThat(out.get(0).status()).isEqualTo(PriceStatus.suspicious);
         assertThat(out.get(0).comparable()).isFalse();
         assertThat(out.subList(1, 4)).allMatch(PricedOffer::comparable);
@@ -39,18 +43,18 @@ class PriceOutliersTest {
     @Test
     void installmentWording_isSuspicious_evenWhenAlone() {
         List<PricedOffer> out = PriceOutliers.mark(List.of(
-                offer(1, 169_016, "[Ansuran 36 Bulan - Kad Debit] New Apple iPhone 17 Pro | 256GB")));
+                offer(1, 169_016, "[Ansuran 36 Bulan - Kad Debit] New Apple iPhone 17 Pro | 256GB")), INSTALLMENT);
         assertThat(out.getFirst().status()).isEqualTo(PriceStatus.suspicious);
     }
 
     @Test
     void fewOffersOrNormalSpread_untouched() {
-        assertThat(PriceOutliers.mark(List.of(offer(1, 100_000, "a"), offer(2, 1_000_000, "b"))))
+        assertThat(PriceOutliers.mark(List.of(offer(1, 100_000, "a"), offer(2, 1_000_000, "b")), INSTALLMENT))
                 .allMatch(PricedOffer::comparable);   // 2곳뿐이면 중간값으로 판단하지 않음
-        assertThat(PriceOutliers.mark(List.of(offer(1, 1_500_000, "a"), offer(2, 1_800_000, "b"), offer(3, 2_000_000, "c"))))
+        assertThat(PriceOutliers.mark(List.of(offer(1, 1_500_000, "a"), offer(2, 1_800_000, "b"), offer(3, 2_000_000, "c")), INSTALLMENT))
                 .allMatch(PricedOffer::comparable);
-        assertThat(PriceOutliers.installment("Apple iPhone 17 Pro 256GB Monthly Deal")).isTrue();
-        assertThat(PriceOutliers.installment("Apple iPhone 17 Pro 256GB")).isFalse();
+        assertThat(PriceOutliers.installment("Apple iPhone 17 Pro 256GB Monthly Deal", INSTALLMENT)).isTrue();
+        assertThat(PriceOutliers.installment("Apple iPhone 17 Pro 256GB", INSTALLMENT)).isFalse();
     }
 
     @Test
