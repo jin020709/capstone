@@ -4,6 +4,7 @@
 `05_migration_002.sql` 적용 후 · 20개 테이블 · 외래 키 25개 (`search_aliases` 추가)
 `06_migration_003.sql` 적용 후 · `mall_product_variants.normalized_option_key` 컬럼 추가
 `07_migration_004.sql` 적용 후 · `products.match_key`(UK, 같은 상품 묶기 키) · `mall_products.listing_title`(쇼핑몰 원래 상품명) 컬럼 추가 → `products` 1 : `mall_products` N (그림에는 아직 반영 안 됨, BACKEND_SPEC.md 4-5 참고)
+`08_migration_005.sql` 적용 후 · `search_aliases.alias_source` 컬럼 추가 (`MANUAL` · `AUTO`, CHECK `chk_search_alias_source`). 백엔드가 이 테이블로 한글 검색어를 영어로 바꿈
 
 - 표기: `PK` 기본키, `FK` 외래키, `UK` 단일 컬럼 UNIQUE
 - 여러 컬럼을 묶은 UNIQUE(복합 · 함수형)는 그림에 표시하지 않고 [5. UNIQUE 제약](#5-unique-제약) 표에 정리

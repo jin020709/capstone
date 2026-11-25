@@ -45,6 +45,21 @@ class GlobalPriceApplicationTests extends IntegrationTestBase {
         mvc.perform(get("/api/products/1/price-history").param("period", "5d")).andExpect(status().isBadRequest());
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    com.teamsoda.globalprice.search.QueryNormalizer normalizer;
+
+    /** 검색어 별칭은 DB search_aliases 에서 읽는다 (05 · 08 마이그레이션). 모델번호 행 · 띄어쓰기 별칭은 단어 변환에 안 씀 */
+    @Test
+    void searchAliases_fromDatabase() {
+        org.assertj.core.api.Assertions.assertThat(normalizer.normalize("아이폰 17 케이스").sourceQuery())
+                .isEqualTo("iphone 17 case");
+        org.assertj.core.api.Assertions.assertThat(normalizer.normalize("핸드폰 필름").sourceQuery())
+                .isEqualTo("phone screen protector");
+        Integer modelRows = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM search_aliases WHERE model_number IS NOT NULL", Integer.class);
+        org.assertj.core.api.Assertions.assertThat(modelRows).isPositive();   // 03 시드 상품의 모델번호 별칭이 있어도 영향 없음
+    }
+
     @Test
     void home_listsEvents() throws Exception {
         mvc.perform(get("/api/home")).andExpect(status().isOk())

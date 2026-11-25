@@ -18,7 +18,8 @@ import org.testcontainers.utility.MountableFile;
 /**
  * 통합 테스트 공통 설정 (@SpringBootTest + MySQL 8).
  * <ul>
- *   <li>환경변수 GP_TEST_DB_URL 이 있으면 그 DB 사용 (01 · 02 · 03_migration_001 · 002 · 04_seed 적용된 globalprice DB)</li>
+ *   <li>환경변수 GP_TEST_DB_URL 이 있으면 그 DB 사용 (GlobalPrice_DB 의 01 ~ 08 스크립트를 적용한 globalprice DB.
+ *       테스트가 데이터를 쓰므로 개발 DB 말고 테스트 전용 DB 를 지정할 것)</li>
  *   <li>없으면 Testcontainers 로 mysql:8.0 을 띄우고 GlobalPrice_DB 스크립트를 순서대로 적용</li>
  *   <li>둘 다 안 되면 (Docker 꺼짐) 테스트를 건너뜀</li>
  * </ul>
@@ -129,7 +130,9 @@ public abstract class IntegrationTestBase {
                     .withCopyFileToContainer(MountableFile.forHostPath(db.resolve("06_migration_003.sql")),
                             "/docker-entrypoint-initdb.d/06.sql")
                     .withCopyFileToContainer(MountableFile.forHostPath(db.resolve("07_migration_004.sql")),
-                            "/docker-entrypoint-initdb.d/07.sql");
+                            "/docker-entrypoint-initdb.d/07.sql")
+                    .withCopyFileToContainer(MountableFile.forHostPath(db.resolve("08_migration_005.sql")),
+                            "/docker-entrypoint-initdb.d/08.sql");
             mysql.start();
         }
         return mysql;

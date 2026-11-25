@@ -189,7 +189,7 @@ interface MallSource {
 3. `price_history`: 마지막 기록과 가격이 같고 6시간이 안 지났으면 기록하지 않음. `total_amount_krw`는 쿠폰을 뺀 기본 계산값(SALE은 적용), 계산 불가면 null.
 4. offer마다 트랜잭션을 따로 둔다. 저장에 실패한 offer는 응답에서 빼고 로그만 남긴다. 같은 상품 · 같은 묶기 키를 동시에 처음 저장하면(중복 키) 한 번 다시 시도.
 
-`price_calculations` 테이블은 쓰지 않는다 (계산은 요청마다 메모리에서). `mall_product_variants.normalized_option_key` · `search_aliases`는 DB에만 있고 백엔드는 아직 쓰지 않는다 (13장).
+`price_calculations` 테이블은 쓰지 않는다 (계산은 요청마다 메모리에서). `mall_product_variants.normalized_option_key`와 `search_aliases`의 모델번호 행은 DB에만 있고 백엔드는 아직 쓰지 않는다 (13장).
 
 ### 4-4. 소스 호출 정책
 
@@ -351,7 +351,10 @@ DB 규칙 · 환율 · offer만 입력으로 받는 순수 함수. 모든 금액
 `discount_desc`는 할인율 높은 순이고 관련도 정렬은 쓰지 않는다.
 
 **검색어 처리**
-- 공백 정리 → `src/main/resources/aliases.csv`로 한글 단어를 영어로 (사전 단어 뒤에 숫자 · 영문이 붙으면 나눔: 갤럭시s25 → galaxy s25). 사전에 없는 한글은 그대로.
+- 공백 정리 → DB `search_aliases`(05 · 08 마이그레이션)로 한글 단어를 영어로 (사전 단어 뒤에 숫자 · 영문이 붙으면 나눔: 갤럭시s25 → galaxy s25). 사전에 없는 한글은 그대로.
+  - 쓰는 행: `is_active` 이고 `model_number`가 NULL 인 행, 단어 하나짜리 별칭만. 같은 말이 여러 행이면 `alias_source` MANUAL(사람이 넣은 값) > AUTO(자동 번역, 아직 없음), 그다음 먼저 넣은 행.
+  - 서버가 10분마다 다시 읽는다 (DB 에서 고치면 재시작 없이 반영). 읽기에 실패하면 마지막으로 읽은 사전을 계속 쓴다.
+  - 액세서리 단어도 사전에 있어야 한다 (케이스 → case, 필름 → screen protector). 걸러내기는 번역된 검색어로 판단해서, 번역이 안 되면 "케이스" 검색에서 영어 상품명의 case 가 걸러진다.
 - **걸러내기** (`ResultFilter`, 키워드는 `application.yml`의 `globalprice.filter`). 검색어에 같은 키워드가 있으면(예: "iphone case") 거르지 않는다. 영문 키워드는 단어 경계 + 복수형(cases, covers)까지.
   - 새 상품 아님: used · pre-owned · refurbished · renewed · for parts · as-is · open box · 중고 · 리퍼 등
   - 액세서리 · 부품: case · cover · protector · charger · cable · stand · mount · pouch · repair · keycap · band 등 약 80개 (영 · 독 · 프 · 스페인어 · 한글)
@@ -593,9 +596,10 @@ gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 
 | 2 | `03_seed_data.sql` | 테스트 데이터 (Amazon US · Rakuten, 시드 기준 금액). **06보다 먼저** (컬럼 이름 없이 INSERT) |
 | 3 | `03_migration_001.sql` | `exchange_rates.tts_rate` 추가 |
 | 4 | `04_seed_dev.sql` | 쇼핑몰 5개 · api_sources 6개 · 배송 규칙 · 세금 규칙(기본 $150 · 미국 $200, 관세 0% · 부가세 10%) · 수수료 1% · 테스트 행사 |
-| 5 | `05_migration_002.sql` | `search_aliases` 테이블 + 별칭 데이터 (백엔드는 아직 `aliases.csv` 사용) |
+| 5 | `05_migration_002.sql` | `search_aliases` 테이블 + 별칭 데이터 |
 | 6 | `06_migration_003.sql` | `mall_product_variants.normalized_option_key` (백엔드 미사용) |
 | 7 | `07_migration_004.sql` | **필수** — `products.match_key`(UNIQUE) · `mall_products.listing_title`. 없으면 검색 · 상세가 실패 |
+| 8 | `08_migration_005.sql` | **필수** — `search_aliases.alias_source`(MANUAL · AUTO) + 한영 별칭 약 180개 (휴대폰 · 액세서리 · 생활가전 · 브랜드 · 색상). 없으면 한글 검색어가 번역되지 않음 |
 | (선택) | `90_demo_price_history.sql` | 시연용 가짜 가격 이력 1년치. 운영 DB 금지. 지우기: `DELETE FROM price_history WHERE TIME(recorded_at) = '04:44:44'` |
 
 ---
@@ -624,7 +628,7 @@ gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 
 | # | 항목 | 현재 상태 · 가정 |
 | --- | --- | --- |
 | 1 | 기본 정렬 | 관련도 → 가격순 (6-2). 순수 가격순으로 할지 확정 필요. 정해지면 실패 테스트 1개 정리 |
-| 2 | 묶기 기준 이원화 | 백엔드는 `match_key`(07). DB 쪽 `search_aliases`(05) · `normalized_option_key`(06)는 `(brand_id, model_number)` 기준으로 설계됐지만 백엔드가 안 씀. 하나로 정할 것. 별칭도 `aliases.csv`와 `search_aliases`가 따로 관리됨 (csv에만 11/18 추가분 19개) |
+| 2 | 묶기 기준 이원화 | 백엔드는 `match_key`(07). DB 쪽 `search_aliases`(05) · `normalized_option_key`(06)는 `(brand_id, model_number)` 기준으로 설계됐지만 백엔드가 안 씀. 하나로 정할 것. (별칭 관리는 11/26 부터 `search_aliases` 하나로 통일) |
 | 3 | AliExpress tracking_id | 없음 → 구매 링크가 제휴 링크 대신 상품 페이지. AliExpress Portals 에서 발급 필요 |
 | 4 | 검색 품질 | AliExpress 브랜드명 검색에 무관 상품, 키워드 걸러내기의 한계 (이름에 표시 없는 케이스 · 부품). 판매처 1곳뿐인 상품은 이상 가격을 못 잡을 수 있음 |
 | 5 | 결제 수수료율 | 시드 1% (실제는 카드 브랜드 1~1.1% + 카드사 0.25% 정도) |
@@ -648,3 +652,4 @@ gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 
 | 2026-11-15 ~ 17 | v1.1: 실제 API 호출 결과 반영 (eBay · AliExpress 최저가 정렬 제거, eBay 원래 통화, Etsy 관련도순 · 이미지 추가 조회 · `keystring:shared_secret`, Shopify USD 요청 · 구매 링크 우선순위, AliExpress tracking_id 선택), 응답 필드를 프론트 API_SPEC 이름에 맞춤, 원화 수수료 면제는 KR 쇼핑몰만, 무료배송 기준은 할인 전 가격, 환율 서버 시작 시 최근 영업일 수집, PERIOD_LOWEST 누락 수정, 행사 알림 09:00, 4개 쇼핑몰 기본 켬, 키는 사용자 환경 변수 |
 | 2026-11-18 ~ 20 | 같은 상품 묶기(`match_key` · `listing_title`, 마이그레이션 002~004), 다른 구성 · 체크표 · 색상별 최저가, 이상 가격(`suspicious`), 모델코드 일치, 관련도 정렬, 출발국 통화 추정(`Origin`), 걸러내기 보강(통신사 잠김 · 박스만 · 시계 밴드 · for 브랜드 · 키워드 확대 · 복수형), 별칭 19개 추가, 상세 갱신 최대 6곳 |
 | 2026-11-22 | AliExpress 출발국 CN 고정 (USD라서 미국 $200 한도로 계산되던 문제). 명세 문서를 이 파일 하나로 통합 (v1.1 docx · 프론트 `API_SPEC.md` 두 벌 삭제) |
+| 2026-11-26 | 검색어 별칭을 `aliases.csv` 대신 DB `search_aliases`에서 읽음 (10분마다 갱신), `aliases.csv` 삭제. 08 마이그레이션: `alias_source` 컬럼 + 별칭 약 180개. 한글 "핸드폰 케이스" · "아이폰 17 케이스" 검색에 케이스가 안 나오던 문제 해결 |
