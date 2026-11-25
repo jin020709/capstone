@@ -174,8 +174,7 @@ public class CatalogRepository {
     private long regroup(long mallProductId, long productId, ProductMatcher.Match match, String image,
                          String listingTitle) {
         if (match == null) return productId;
-        String currentKey = jdbc.query("SELECT match_key FROM products WHERE product_id = ?",
-                (rs, i) -> rs.getString(1), productId).stream().findFirst().orElse(null);
+        String currentKey = matchKey(productId);
         if (match.key().equals(currentKey)) {
             // 예전에 상품명이 두 번 붙어 저장된 것 정리 (모델코드 · 상품명 키 상품은 리스팅 이름 그대로)
             if (match.key().startsWith("t:") || match.key().startsWith("code:")) {
@@ -212,8 +211,10 @@ public class CatalogRepository {
 
     /** 상품의 묶기 키 (없으면 null) */
     public String matchKey(long productId) {
-        return jdbc.query("SELECT match_key FROM products WHERE product_id = ?", (rs, i) -> rs.getString(1), productId)
-                .stream().findFirst().orElse(null);
+        // match_key 가 NULL 인 행이 있으므로 stream().findFirst() 를 쓰면 NPE (Optional.of(null))
+        List<String> keys = jdbc.queryForList("SELECT match_key FROM products WHERE product_id = ?", String.class,
+                productId);
+        return keys.isEmpty() ? null : keys.getFirst();
     }
 
     /** 묶기 키가 prefix 로 시작하는 상품들 (id → key). 다른 구성 찾기용 */
