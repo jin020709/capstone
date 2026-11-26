@@ -20,6 +20,7 @@ TEAM SODA · 해외직구 가격비교 서비스
 | Etsy (Open API v3) | 켜짐 · 실제 호출 확인 | 키 필요. 수공예 · 빈티지 위주라 전자기기 비교에 약함 |
 | AliExpress (Affiliate) | 켜짐 · 실제 호출 확인 | 키 필요. tracking_id 없으면 제휴 링크 대신 상품 페이지 |
 | 한국수출입은행 환율 | 실제 호출 확인 | `KOREAEXIM_KEY` 필요. 서버 시작 시 최근 영업일 값 자동 수집 |
+| Google Play 지원 기기 목록 (공개 CSV) | 실제 내려받기 확인 | 키 없음. 휴대폰 · 태블릿 모델 목록(같은 상품 묶기, 4-5). DB 에 넣어 두고 7일마다 갱신, 검색 중에는 호출 안 함 |
 
 키가 없거나 `*_ENABLED=false`인 소스는 `skipped`로 표시되고, 앱 기동에는 영향이 없습니다.
 
@@ -67,6 +68,8 @@ GET /api/products?q=아이폰 17
 | 환율 수집 | 평일 11:30, 빈 결과면 15:00 재시도 | 수출입은행 → `exchange_rates`. 서버 시작 시 오늘 값이 없으면 하루씩 거슬러(최대 7일) 최근 영업일 값 수집 |
 | 관심 상품 가격 갱신 | 6시간마다 (0 · 6 · 12 · 18시) | 찜 · 활성 알림이 걸린 상품만 다시 조회 → 저장 → 이력 → 알림 판정 |
 | 행사 알림 | 매일 09:00 (+ 6시간 작업 때도) | EVENT_START · COUPON_EXPIRY 판정 |
+| 모델 목록 다시 읽기 | 서버 시작 직후 · 10분마다 | DB `model_codes` · `device_models` → 메모리 (`ModelCodes`). DB 만 읽음 |
+| 기기 목록 갱신 | 서버 시작 15초 뒤 · 6시간마다 확인 | 마지막으로 받은 지 7일이 지났을 때만 Google Play 기기 목록을 내려받아 GPLAY 행을 새로 채움 (`DeviceCatalogImport`). 실패하면 기존 행 유지 |
 
 관심 상품이 아닌 상품은 갱신하지 않는다. 가격 이력도 검색됐거나 갱신된 상품만 쌓인다.
 
@@ -83,7 +86,7 @@ GET /api/products?q=아이폰 17
 | source | `MallSource` 인터페이스, ebay / shopify / aliexpress / etsy 구현, 호출 예산 · 쿨다운(SourceGuard) |
 | rate | 수출입은행 클라이언트 · 환율 서비스 |
 | pricing | `PriceCalculator` (순수 함수) · 규칙 조회 |
-| catalog | 상품 저장 흐름(`CatalogService`) · SQL(`CatalogRepository`) · 묶기 판단(`ProductGrouping` · `ProductMatcher` · `ModelCode`) · 이상 가격(`OutlierService` · `PriceOutliers`) · 출발국(`Origin`) · 색상(`ColorName`) · 계산(`OfferPricer`) · 상세 · 가격 이력 · 응답 모양(Views) |
+| catalog | 상품 저장 흐름(`CatalogService`) · SQL(`CatalogRepository`) · 묶기 판단(`ProductGrouping` · `ProductMatcher` · `ModelCode`) · 모델 목록(`ModelCodes` · `DeviceCatalog` · `DeviceCatalogImport`) · 이상 가격(`OutlierService` · `PriceOutliers`) · 출발국(`Origin`) · 색상(`ColorName`) · 계산(`OfferPricer`) · 상세 · 가격 이력 · 응답 모양(Views) |
 | search | 검색 흐름(`SearchService`) · 관련도 정렬(`SearchRanker`) · 체크표(`FacetBuilder`) · 별칭(`QueryNormalizer` · `AliasRepository`) · 걸러내기(`ResultFilter`) · `SameProductGrouper` · 소스 호출(SourceCaller) |
 | wishlist / alert | 관심 상품, 알림 조건 · 판정 · 받은 알림 (JPA) |
 | scheduler / web | 스케줄 작업, `@RestController` |
@@ -99,7 +102,7 @@ GET /api/products?q=아이폰 17
 | 테스트 | JUnit 5, JDK 내장 HttpServer 가짜 서버, Testcontainers MySQL 8 |
 | JDK | Gradle foojay resolver 로 JDK 25 자동 다운로드 |
 
-계층: Controller → Service → Repository. 외부 HTTP는 `source`와 `rate`만 호출한다. `PriceCalculator`는 DB · 시간 · 네트워크에 의존하지 않는다.
+계층: Controller → Service → Repository. 외부 HTTP는 `source` · `rate`와 기기 목록 내려받기(`catalog.DeviceCatalogImport`, 7일마다)만 호출한다. `PriceCalculator`는 DB · 시간 · 네트워크에 의존하지 않는다.
 offer 의 출발국 · 색상 · 묶기 키는 `OfferData`를 만들 때 한 번만 정하고 계산 · 화면 · 필터가 그 값을 쓴다 (곳곳에서 따로 계산하지 않음).
 
 ---
@@ -562,6 +565,7 @@ DB `chk_alert_target`과 같은 조합. 어기면 400.
 | `ALI_APP_KEY` · `ALI_APP_SECRET` · `ALI_TRACKING_ID` | AliExpress 제휴 (tracking_id 선택) | AliExpress skipped |
 | `KOREAEXIM_KEY` | 수출입은행 인증키 | 환율 수집 안 함 |
 | `EBAY_ENABLED` · `SHOPIFY_ENABLED` · `ALI_ENABLED` · `ETSY_ENABLED` | 쇼핑몰 끄기 (`false`) | 모두 켜짐 |
+| `DEVICE_CATALOG_ENABLED` | Google Play 기기 목록 자동 내려받기 끄기 (`false`). 끄면 DB 에 있는 행만 씀 | 켜짐 |
 
 키 · DB 비밀번호는 OS 사용자 환경 변수로 한 번 등록한다 (Windows: PowerShell `[Environment]::SetEnvironmentVariable("이름", "값", "User")`, Mac: `~/.zshrc`에 `export`). 등록 후 열려 있던 터미널 · IDE는 다시 켠다.
 
@@ -569,6 +573,7 @@ DB `chk_alert_target`과 같은 조합. 어기면 400.
 - `globalprice.filter`: 새 상품 아님 · 액세서리 키워드, 통신사 잠김 · 언락 · 시계 밴드 (정규식)
 - `globalprice.outliers.installment-keywords`: 할부 · 계약금 표기 (정규식)
 - `globalprice.display.platform-domains`: 쇼핑몰 자체 도메인 (상품 링크가 여기 속하면 판매자 도메인 `seller`를 null 로)
+- `globalprice.device-catalog`: 기기 목록 `url`(Google Play 공개 CSV) · `refresh-after`(7일) · `enabled`
 
 ---
 
@@ -588,7 +593,7 @@ DB `chk_alert_target`과 같은 조합. 어기면 400.
 ```
 gradlew.bat test                 # 단위 테스트 (통합은 DB 가 없으면 건너뜀)
 # 통합 테스트: Docker 가 켜져 있으면 Testcontainers(mysql:8.0) 자동,
-# 또는 01~07 스크립트를 적용한 테스트 전용 DB 를 지정 (개발 DB 를 쓰지 말 것)
+# 또는 01~10 스크립트를 적용한 테스트 전용 DB 를 지정 (개발 DB 를 쓰지 말 것)
 set GP_TEST_DB_URL=jdbc:mysql://127.0.0.1:3306/globalprice?serverTimezone=Asia/Seoul
 gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 --rerun
 ```
@@ -598,11 +603,12 @@ gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 
 | PriceCalculator | 5장의 모든 경계 · 시드 기준 금액 (면세 한도 경계, 정률 할인 상한, 최소 구매금액 미달, 정액 할인, 할인 > 상품가, 1만원 미만 세금, 무료배송 경계, 원화 결제, 배송비 모름, JPY · IDR, 규칙 우선순위, 반올림 경계, 전신환매도율) |
 | 소스 어댑터 | 가짜 서버로 정상 · 429 · 503 · 지연 · 401 · 깨진 JSON · 값 누락. 실제 응답 샘플(`src/test/resources/samples`), Shopify JSON · SSE, AliExpress 서명 · tracking_id 유무 · 출발국 CN, 수출입은행 파싱 |
 | 환율 서비스 | 주말이면 직전 영업일, 이미 최신이면 호출 없음, 키 없음 · 인증 오류면 중단 |
-| 묶기 · 출발국 · 이상 가격 · 색상 · 모델코드 | `ProductMatcherTest` · `OriginTest` · `PriceOutliersTest` · `ColorNameTest` · `ModelCodeTest` · `SameProductGrouperTest` |
+| 묶기 · 출발국 · 이상 가격 · 색상 · 모델코드 | `ProductMatcherTest` · `OriginTest` · `PriceOutliersTest` · `OutlierServiceTest` · `ColorNameTest` · `ModelCodeTest` · `SameProductGrouperTest` · `ProductGroupingTest` |
+| 모델 목록 | `GalaxyModelCodeTest` (09 시드 행마다 번호 키 = 모델명 키) · `DeviceCatalogTest` (실제 CSV 행으로 읽기 · 가장 긴 이름 · 모델번호 · 5G/4G 판 · 애매하면 안 묶음). 통합 테스트는 기기 목록을 내려받지 않음 (`device-catalog.enabled=false`) |
 | 검색 서비스 | 가짜 소스 3개: 일부 실패 200, 전부 실패 503 · 502, 캐시 히트 시 외부 호출 0회, 걸러내기 · 정렬 · 필터 · 페이지 · 예산 · 쿨다운, 관련도(`RelevanceTest`), 체크표(`FacetTest`) |
 | 통합 (실제 MySQL) | API 전체 흐름, 시드 금액, 저장 멱등 · 이력 중복 방지, stale 표시, 관심 상품 갱신 → 알림 · 하루 1회, 행사 알림 |
 
-현재 141개 (통합 10개는 DB 없으면 건너뜀). 묶기 판단은 메모리 Store 로(`ProductGroupingTest`), 키워드 목록은 실제 `application.yml`을 읽어서(`support/RealConfig`) 확인한다. **실패 1개**: `SearchServiceTest.partialFailure_returns200WithSourceStatuses` — 관련도 정렬 도입 후 순서 기대값을 고치지 않음 (13장 기본 정렬 결정 후 정리).
+현재 158개 (통합 테스트는 DB 없으면 건너뜀). 묶기 판단은 메모리 Store 로(`ProductGroupingTest`), 키워드 목록은 실제 `application.yml`을 읽어서(`support/RealConfig`) 확인한다. **실패 1개**: `SearchServiceTest.partialFailure_returns200WithSourceStatuses` — 관련도 정렬 도입 후 순서 기대값을 고치지 않음 (13장 기본 정렬 결정 후 정리).
 
 ---
 
@@ -641,7 +647,8 @@ gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 
 | 9 · 10 · 11 | Shopify · AliExpress · Etsy | 완료 (실제 확인) |
 | 12 | EVENT_START · COUPON_EXPIRY 알림 | 완료 |
 | 13 | 같은 상품 묶기 · 다른 구성 · 체크표 · 색상별 최저가 · 이상 가격 · 관련도 정렬 | 완료 (11/18~) |
-| + | 프론트 연결 (static 복사본 `USE_MOCK=false`) | 완료 |
+| 14 | 검색어 별칭 DB · 갤럭시 모델번호 DB · Google Play 기기 목록으로 휴대폰 · 태블릿 묶기 | 완료 (11/26~27) |
+| + | 프론트 연결 (Gradle 이 `GlobalPrice_frontend/static`을 복사하며 `USE_MOCK=false`로 바꿈) | 완료 |
 
 ---
 
@@ -650,7 +657,7 @@ gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 
 | # | 항목 | 현재 상태 · 가정 |
 | --- | --- | --- |
 | 1 | 기본 정렬 | 관련도 → 가격순 (6-2). 순수 가격순으로 할지 확정 필요. 정해지면 실패 테스트 1개 정리 |
-| 2 | 묶기 기준 이원화 | 백엔드는 `match_key`(07). DB 쪽 `search_aliases`(05) · `normalized_option_key`(06)는 `(brand_id, model_number)` 기준으로 설계됐지만 백엔드가 안 씀. 하나로 정할 것. (별칭 관리는 11/26 부터 `search_aliases` 하나로 통일) |
+| 2 | 묶기 기준 이원화 | 백엔드는 `match_key`(07). DB 쪽 `search_aliases`(05) · `normalized_option_key`(06)는 `(brand_id, model_number)` 기준으로 설계됐지만 백엔드가 안 씀. 하나로 정할 것. (별칭 관리는 11/26 부터 `search_aliases` 하나로 통일. 모델번호 · 기기 모델은 11/27 부터 `model_codes` · `device_models`(09 · 10)를 `match_key` 기준으로 씀) |
 | 3 | AliExpress tracking_id | 없음 → 구매 링크가 제휴 링크 대신 상품 페이지. AliExpress Portals 에서 발급 필요 |
 | 4 | 검색 품질 | AliExpress 브랜드명 검색에 무관 상품, 키워드 걸러내기의 한계 (이름에 표시 없는 케이스 · 부품). 판매처 1곳뿐인 상품은 이상 가격을 못 잡을 수 있음 |
 | 5 | 결제 수수료율 | 시드 1% (실제는 카드 브랜드 1~1.1% + 카드사 0.25% 정도) |
@@ -658,7 +665,7 @@ gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 
 | 7 | 기본 세금 규칙 | 전자기기 가정 관세 0%. 카테고리를 모르는 상품의 관세율 |
 | 8 | Shopify 에이전트 프로필 | 예시 fixture 사용 중. 운영 전 팀 프로필 호스팅 필요 |
 | 9 | Etsy 포함 여부 | 켜져 있음. 결과 성격상 끌지는 팀 결정 (`ETSY_ENABLED=false`) |
-| 10 | 각 API 약관 | 가격 저장 · 재표시 · 비교 허용, 제휴 링크 표시 의무 (eBay 제휴 링크는 EPN 캠페인 ID 필요) |
+| 10 | 각 API 약관 | 가격 저장 · 재표시 · 비교 허용, 제휴 링크 표시 의무 (eBay 제휴 링크는 EPN 캠페인 ID 필요). Google Play 기기 목록은 안내 페이지에 사용 조건이 따로 적혀 있지 않음 (공개 CSV) |
 | 11 | 호출 한도 | `daily-budget` 3,000 (eBay · Etsy 실제 한도 하루 5,000) |
 | 12 | 응답 시간 | 캐시 미스 약 1.3~2.8초(실측), 캐시 히트 약 0.1초. "p95 1초"는 캐시 히트에만 적용 가능 |
 | 13 | AliExpress 해외 창고 | 출발국 CN 고정이라 해외 창고(미국 등) 발송 상품도 $150 한도로 계산됨 (비용을 낮게 잡는 쪽은 아님) |
@@ -679,3 +686,4 @@ gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 
 | 2026-11-27 | 갤럭시 모델번호를 코드 대신 DB `model_codes`(09 마이그레이션, 39개)에서 읽음 (10분마다 갱신). 모델 하나에 번호 여러 개, `SM-` 없는 번호도 인식. Fold5 · A 시리즈 등 내장 목록에 없던 모델도 같은 상품으로 묶임 |
 | 2026-11-27 | 휴대폰 · 태블릿 모델 목록: Google Play 지원 기기 CSV 를 받아 DB `device_models` · `model_codes`(10 마이그레이션)에 넣고, 상품명 속 모델 이름 · 모델번호로 샤오미 · 원플러스 · 모토로라 등도 같은 상품으로 묶음 (`dev|` 키). 갤럭시 번호도 이 목록에서 채움. `256/512GB` 같은 용량 목록을 용량 여러 개로 읽도록 수정 |
 | 2026-11-27 | 모델코드에서 `inches` · `oz` · `lb` 단위와 칩 이름(Dimensity · Snapdragon · Helio 등) 제외. `13-inches` · `16.2oz` · `Dimensity7300` 이 모델코드로 잡혀 다른 상품끼리 묶이던 문제 |
+| 2026-11-27 | 문서 동기화: 기기 목록(외부 데이터 · 스케줄 · 구조 · `DEVICE_CATALOG_ENABLED` · `device-catalog` 설정), 테스트 158개 · 01~10 스크립트, 13장 2 · 10번, 12장 상태. ERD 에 마이그레이션 004~007 컬럼 · 테이블 · UNIQUE · CHECK(27개) 반영 |
