@@ -61,6 +61,18 @@ class GlobalPriceApplicationTests extends IntegrationTestBase {
         org.assertj.core.api.Assertions.assertThat(modelRows).isPositive();   // 03 시드 상품의 모델번호 별칭이 있어도 영향 없음
     }
 
+    /** 갤럭시 모델번호는 DB model_codes 에서 읽는다 (09 마이그레이션). 내장 목록에 없는 Fold5 도 묶인다 */
+    @Test
+    void galaxyModelCodes_fromDatabase(@org.springframework.beans.factory.annotation.Autowired com.teamsoda.globalprice.catalog.ModelCodes modelCodes) {
+        modelCodes.reload();
+        try {
+            org.assertj.core.api.Assertions.assertThat(com.teamsoda.globalprice.catalog.ProductMatcher
+                    .match("Samsung SM-F946B/DS 512GB").key()).isEqualTo("galaxy|z fold|5||512");
+        } finally {
+            com.teamsoda.globalprice.catalog.ProductMatcher.useGalaxyCodes(null);
+        }
+    }
+
     @Test
     void home_listsEvents() throws Exception {
         mvc.perform(get("/api/home")).andExpect(status().isOk())

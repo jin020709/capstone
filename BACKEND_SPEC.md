@@ -224,6 +224,7 @@ interface MallSource {
 - 색상 · 통신사 · 언락 · 배송 문구는 무시한다 (판매처 줄에서 원래 상품명 `title`로 보여 줌).
 - 묶지 않는 경우: 한 상품명에 용량이나 모델이 여러 개, 용량 없음, 세트 · 묶음(`bundle`, `combo`, `set of`, `with case`, `세트`, `사은품` 등) → 다음 순서로 넘어감.
 - **모델코드** (`ModelCode`): 영문 + 숫자 5~20자, 숫자 3개 이상 (또는 6자 이상 · 숫자 2개 · 영문 3개). `256GB` · `240Hz` 같은 단위와 `iPhone17` 같은 제품 이름은 제외. 비교 시 대소문자 · 하이픈 · 공백 무시 (`SM-S938B` = `sms938b`).
+- **갤럭시 모델번호** (`ModelCodes`, DB `model_codes` · 09 마이그레이션): 번호 → 모델 (`s938` → S25 Ultra, `f946` → Z Fold5). 모델 하나에 번호 여러 개 가능 (A15 ← `a155` · `a156`). 지역 글자는 무시 (`SM-S938B` = `SM-S938N` = `SM-S938U1`). `SM-` 없이 쓴 번호(`(S938B)`)는 상품명에 samsung · galaxy 가 있을 때만 알아본다. 상품명 속 모델명과 번호가 다른 모델이거나 번호 두 개가 서로 다른 모델이면 갤럭시 규칙으로 묶지 않는다. 서버 시작 직후와 10분마다 다시 읽고, 테이블이 없거나 비면 내장 목록(S24 · S25 · Fold/Flip 6 · 7, 11개)을 쓴다. 번호를 더할 때는 DB 에 행만 넣으면 된다.
 - **다른 구성**: 키에서 용량을 뺀 부분(family, 예 `iphone|17 pro`)이 같은 상품들. 상세 `configs`로 내려준다.
 
 ### 4-6. 이상 가격 (`OutlierService`)
@@ -610,6 +611,7 @@ gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 
 | 6 | `06_migration_003.sql` | `mall_product_variants.normalized_option_key` (백엔드 미사용) |
 | 7 | `07_migration_004.sql` | **필수** — `products.match_key`(UNIQUE) · `mall_products.listing_title`. 없으면 검색 · 상세가 실패 |
 | 8 | `08_migration_005.sql` | **필수** — `search_aliases.alias_source`(MANUAL · AUTO) + 한영 별칭 약 180개 (휴대폰 · 액세서리 · 생활가전 · 브랜드 · 색상). 없으면 한글 검색어가 번역되지 않음 |
+| 9 | `09_migration_006.sql` | `model_codes` 테이블 + 갤럭시 모델번호 39개 (S22~S25 · Z Fold/Flip 3~7 · A 시리즈). 없으면 내장 11개만 써서 Fold5 · A 시리즈 등 번호만 쓴 상품명이 안 묶임 |
 | (선택) | `90_demo_price_history.sql` | 시연용 가짜 가격 이력 1년치. 운영 DB 금지. 지우기: `DELETE FROM price_history WHERE TIME(recorded_at) = '04:44:44'` |
 
 ---
@@ -664,3 +666,4 @@ gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 
 | 2026-11-22 | AliExpress 출발국 CN 고정 (USD라서 미국 $200 한도로 계산되던 문제). 명세 문서를 이 파일 하나로 통합 (v1.1 docx · 프론트 `API_SPEC.md` 두 벌 삭제) |
 | 2026-11-26 | 검색어 별칭을 `aliases.csv` 대신 DB `search_aliases`에서 읽음 (10분마다 갱신), `aliases.csv` 삭제. 08 마이그레이션: `alias_source` 컬럼 + 별칭 약 180개. 한글 "핸드폰 케이스" · "아이폰 17 케이스" 검색에 케이스가 안 나오던 문제 해결 |
 | 2026-11-26 | 구조 정리: 상세 500(match_key NULL NPE) 수정, 출발국 · 색상 · 묶기 키를 OfferData 에서 한 번만 계산, SearchService 를 SearchRanker · FacetBuilder 로 분리, 묶기 판단을 ProductGrouping 으로, 이상 가격을 OutlierService 하나로 (찜 목록 · 알림 판정도 같은 규칙), 하드코딩 목록을 application.yml 로, 프론트 static 복사본을 Gradle 자동 복사로, 상세 `colors` 추가(프론트 색상 판단 코드 삭제) |
+| 2026-11-27 | 갤럭시 모델번호를 코드 대신 DB `model_codes`(09 마이그레이션, 39개)에서 읽음 (10분마다 갱신). 모델 하나에 번호 여러 개, `SM-` 없는 번호도 인식. Fold5 · A 시리즈 등 내장 목록에 없던 모델도 같은 상품으로 묶임 |

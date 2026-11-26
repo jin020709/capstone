@@ -132,7 +132,9 @@ public abstract class IntegrationTestBase {
                     .withCopyFileToContainer(MountableFile.forHostPath(db.resolve("07_migration_004.sql")),
                             "/docker-entrypoint-initdb.d/07.sql")
                     .withCopyFileToContainer(MountableFile.forHostPath(db.resolve("08_migration_005.sql")),
-                            "/docker-entrypoint-initdb.d/08.sql");
+                            "/docker-entrypoint-initdb.d/08.sql")
+                    .withCopyFileToContainer(MountableFile.forHostPath(db.resolve("09_migration_006.sql")),
+                            "/docker-entrypoint-initdb.d/09.sql");
             mysql.start();
         }
         return mysql;

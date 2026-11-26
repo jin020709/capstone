@@ -1,5 +1,8 @@
 package com.teamsoda.globalprice.catalog;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeSet;
@@ -244,8 +247,11 @@ public final class ProductMatcher {
     private static final Pattern GALAXY = Pattern.compile(
             "(?:galaxy|samsung)\\s?(?:galaxy\\s?)?(z\\s?fold|z\\s?flip|fold|flip|tab\\s?s|tab\\s?a|note|s|a|m)\\s?(\\d{1,2})"
                     + "(?:\\s?(\\+|plus|ultra|fe|edge))?(?![a-z0-9])");
-    /** 모델번호 → (시리즈, 번호, 접미사). 확실한 것만 */
-    private static final Map<String, String[]> CODES = Map.ofEntries(
+    /**
+     * 모델번호 → (시리즈, 번호, 접미사). 실제 목록은 DB model_codes ({@link ModelCodes}, 09_migration_006) 이고,
+     * 이 내장 목록은 DB 를 아직 못 읽었거나 테이블이 비어 있을 때만 쓴다.
+     */
+    private static final Map<String, String[]> BUILT_IN_CODES = Map.ofEntries(
             Map.entry("s931", new String[] { "s", "25", "" }),
             Map.entry("s936", new String[] { "s", "25", "+" }),
             Map.entry("s938", new String[] { "s", "25", "ultra" }),
@@ -257,7 +263,39 @@ public final class ProductMatcher {
             Map.entry("f766", new String[] { "z flip", "7", "" }),
             Map.entry("f956", new String[] { "z fold", "6", "" }),
             Map.entry("f741", new String[] { "z flip", "6", "" }));
-    private static final Pattern SM_CODE = Pattern.compile("(?<![a-z0-9])sm-?([sf]\\d{3})");
+    private static volatile Map<String, String[]> galaxyCodes = BUILT_IN_CODES;
+    /** SM-S938B · SM-F946U1 처럼 SM- 가 붙은 번호 (지역 글자는 무시) */
+    private static final Pattern SM_CODE = Pattern.compile("(?<![a-z0-9])sm-?([sfa]\\d{3})");
+    /** SM- 없이 쓴 번호 ("Galaxy S25 Ultra (S938B)"). 다른 숫자와 헷갈리므로 상품명에 samsung · galaxy 가 있을 때만 */
+    private static final Pattern BARE_CODE = Pattern.compile("(?<![a-z0-9-])([sfa]\\d{3})[a-z]{0,2}\\d?(?![a-z0-9])");
+    private static final Pattern SAMSUNG = Pattern.compile("(?<![a-z])(samsung|galaxy)(?![a-z])");
+
+    /**
+     * DB 에서 읽은 갤럭시 모델번호로 바꾼다. 비어 있으면 내장 목록을 쓴다.
+     *
+     * @param codes 번호(소문자, SM- 없음) → model_key 의 갤럭시 칸 (시리즈, 번호, 접미사)
+     */
+    public static void useGalaxyCodes(Map<String, String[]> codes) {
+        galaxyCodes = codes == null || codes.isEmpty() ? BUILT_IN_CODES : Map.copyOf(codes);
+    }
+
+    /** 상품명 속 갤럭시 모델번호가 가리키는 모델. 번호가 없거나 서로 다른 모델을 가리키면 null */
+    private static String[] galaxyFromCode(String t) {
+        Map<String, String[]> codes = galaxyCodes;
+        String[] found = null;
+        List<Matcher> ms = new ArrayList<>(2);
+        ms.add(SM_CODE.matcher(t));
+        if (SAMSUNG.matcher(t).find()) ms.add(BARE_CODE.matcher(t));
+        for (Matcher c : ms) {
+            while (c.find()) {
+                String[] model = codes.get(c.group(1));
+                if (model == null) continue;
+                if (found != null && !Arrays.equals(found, model)) return null;
+                found = model;
+            }
+        }
+        return found;
+    }
 
     static Match galaxy(String t) {
         String[] fromName = null;
@@ -275,9 +313,7 @@ public final class ProductMatcher {
                 if (!m.group(2).equals(fromName[1]) || !s2.equals(suffix)) return null;
             }
         }
-        String[] fromCode = null;
-        Matcher c = SM_CODE.matcher(t);
-        if (c.find()) fromCode = CODES.get(c.group(1));
+        String[] fromCode = galaxyFromCode(t);
         String[] model = fromName != null ? fromName : fromCode;
         if (model == null) return null;
         if (fromName != null && fromCode != null && !String.join("|", fromName).equals(String.join("|", fromCode))) {
