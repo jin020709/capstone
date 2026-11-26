@@ -25,15 +25,16 @@ public final class PriceOutliers {
     static final int MIN_OFFERS = 3;
     static final double LOW_RATIO = 1.0 / 3.0;
 
-    private static final Pattern INSTALLMENT = Pattern.compile(
-            "installment|instalment|\\bmonthly\\b|/\\s*mo\\b|per\\s+month|\\bdeposit\\b|down\\s*payment|\\bansuran\\b|\\bcicilan\\b"
-                    + "|\\bbulan\\b|\\bmensualit|\\braten\\b|ratenzahlung|할부|월\\s*납|계약금|分期|頭金|月々|分割");
-
     private PriceOutliers() {
     }
 
-    public static boolean installment(String title) {
-        return title != null && INSTALLMENT.matcher(title.toLowerCase(Locale.ROOT)).find();
+    /** 할부 · 계약금 표기 정규식 목록(application.yml globalprice.outliers.installment-keywords) → 하나의 패턴 */
+    public static Pattern installmentPattern(List<String> regexes) {
+        return regexes.isEmpty() ? Pattern.compile("(?!)") : Pattern.compile(String.join("|", regexes));
+    }
+
+    public static boolean installment(String title, Pattern installment) {
+        return title != null && installment.matcher(title.toLowerCase(Locale.ROOT)).find();
     }
 
     static final int MIN_FAMILY = 2;
@@ -66,10 +67,10 @@ public final class PriceOutliers {
     }
 
     /** offers 중 이상 가격인 것을 status=suspicious 로 바꾼 새 목록 (순서 유지) */
-    public static List<PricedOffer> mark(List<PricedOffer> offers) {
+    public static List<PricedOffer> mark(List<PricedOffer> offers, Pattern installment) {
         List<Long> totals = new ArrayList<>();
         for (PricedOffer o : offers) {
-            if (o.comparable() && !installment(o.data().listingTitle())) totals.add(o.total());
+            if (o.comparable() && !installment(o.data().listingTitle(), installment)) totals.add(o.total());
         }
         Long median = null;
         if (totals.size() >= MIN_OFFERS) {
@@ -79,7 +80,7 @@ public final class PriceOutliers {
         }
         List<PricedOffer> out = new ArrayList<>(offers.size());
         for (PricedOffer o : offers) {
-            boolean bad = o.applied() != null && (installment(o.data().listingTitle())
+            boolean bad = o.applied() != null && (installment(o.data().listingTitle(), installment)
                     || (median != null && o.total() < median * LOW_RATIO));
             out.add(bad ? new PricedOffer(o.data(), o.applied(), o.normal(), PriceStatus.suspicious) : o);
         }

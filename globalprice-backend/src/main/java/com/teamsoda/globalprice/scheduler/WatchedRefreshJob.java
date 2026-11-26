@@ -1,11 +1,11 @@
 package com.teamsoda.globalprice.scheduler;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -23,6 +23,8 @@ import com.teamsoda.globalprice.catalog.MallDirectory.Mall;
 import com.teamsoda.globalprice.catalog.OfferPricer;
 import com.teamsoda.globalprice.catalog.Offers.OfferData;
 import com.teamsoda.globalprice.catalog.Offers.PricedOffer;
+import com.teamsoda.globalprice.catalog.Offers.ProductGroup;
+import com.teamsoda.globalprice.catalog.OutlierService;
 import com.teamsoda.globalprice.common.SyncLogRepository;
 import com.teamsoda.globalprice.common.SyncLogRepository.Status;
 import com.teamsoda.globalprice.search.SourceCaller;
@@ -49,10 +51,11 @@ public class WatchedRefreshJob {
     private final OfferPricer pricer;
     private final AlertEvaluator evaluator;
     private final SyncLogRepository syncLog;
+    private final OutlierService outliers;
 
     public WatchedRefreshJob(CatalogRepository repository, CatalogService catalog, MallDirectory malls,
                              SourceCaller caller, OfferPricer pricer, AlertEvaluator evaluator,
-                             SyncLogRepository syncLog) {
+                             SyncLogRepository syncLog, OutlierService outliers) {
         this.repository = repository;
         this.catalog = catalog;
         this.malls = malls;
@@ -60,6 +63,7 @@ public class WatchedRefreshJob {
         this.pricer = pricer;
         this.evaluator = evaluator;
         this.syncLog = syncLog;
+        this.outliers = outliers;
     }
 
     @Scheduled(cron = "0 0 */6 * * *", zone = "Asia/Seoul")
@@ -129,20 +133,17 @@ public class WatchedRefreshJob {
             syncLog.record(source.sourceName(), "PRODUCT_REFRESH", status, lastHttp, ok, bad, lastError, runStart);
         }
 
-        // 2. 알림 판정 (갱신 후 저장값 기준, 쿠폰 제외)
+        // 2. 알림 판정 (갱신 후 저장값 기준, 쿠폰 제외). 이상 가격은 화면과 같은 규칙으로 빼서
+        //    할부 표기 · 터무니없이 싼 리스팅 때문에 목표가 알림이 잘못 가지 않게 한다
         OfferPricer.Context after = pricer.context();
-        Map<Long, List<StoredOffer>> current = repository.findByProductIds(productIds).stream()
-                .collect(Collectors.groupingBy(StoredOffer::productId));
         Map<Long, ProductPrice> prices = new HashMap<>();
-        for (Long id : productIds) {
-            List<PricedOffer> priced = new ArrayList<>();
-            for (StoredOffer s : current.getOrDefault(id, List.of())) {
-                priced.add(pricer.price(OfferData.of(s), after, false, false));
-            }
-            Long best = priced.stream().filter(PricedOffer::comparable).map(PricedOffer::total)
+        for (ProductGroup g : outliers.judge(pricer.groups(repository.findByProductIds(productIds), after, false,
+                Set.of()), after)) {
+            Long best = g.offers().stream().filter(PricedOffer::comparable).map(PricedOffer::total)
                     .min(Long::compare).orElse(null);
-            prices.put(id, new ProductPrice(id, best, previousLowest.get(id)));
+            prices.put(g.productId(), new ProductPrice(g.productId(), best, previousLowest.get(g.productId())));
         }
+        for (Long id : productIds) prices.putIfAbsent(id, new ProductPrice(id, null, previousLowest.get(id)));
         int notes = evaluator.evaluatePrices(prices) + evaluator.evaluateEvents();
         return new RunResult(refreshed, failed, notes);
     }

@@ -3,7 +3,9 @@ package com.teamsoda.globalprice.catalog;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -52,7 +54,8 @@ public class ProductService {
                                 List<String> badges, Long bestTotal, Long bestNormalTotal, String bestStore,
                                 int offerCount, List<OfferView> offers, List<OfferView> variants,
                                 List<EventView> events, RatesView rates, String priceStatus,
-                                LocalDateTime fetchedAt, Boolean wished, List<ConfigView> configs) {
+                                LocalDateTime fetchedAt, Boolean wished, List<ConfigView> configs,
+                                List<Views.ColorView> colors) {
     }
 
     /**
@@ -79,11 +82,12 @@ public class ProductService {
     private final MallDirectory malls;
     private final SourceCaller caller;
     private final RuleRepository rules;
+    private final OutlierService outliers;
     private final Duration refreshTimeout;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
     public ProductService(CatalogRepository repository, CatalogService catalog, OfferPricer pricer, ViewFactory views,
-                          MallDirectory malls, SourceCaller caller, RuleRepository rules,
+                          MallDirectory malls, SourceCaller caller, RuleRepository rules, OutlierService outliers,
                           GlobalPriceProperties props) {
         this.repository = repository;
         this.catalog = catalog;
@@ -92,6 +96,7 @@ public class ProductService {
         this.malls = malls;
         this.caller = caller;
         this.rules = rules;
+        this.outliers = outliers;
         this.refreshTimeout = props.search().detailRefreshTimeout();
     }
 
@@ -109,21 +114,17 @@ public class ProductService {
         Set<Long> refreshed = refresh(stored, ctx);
         if (!refreshed.isEmpty()) stored = repository.findByProductId(productId);
 
-        // 다른 구성(용량별) 최저가로 기준값을 잡아, 판매처가 1~2곳뿐이어도 터무니없이 싼 가격을 거른다
-        List<ConfigView> cfg = configs(productId, null, 0);
-        Long familyRef = PriceOutliers.familyReference(cfg.stream().filter(c -> !c.current())
-                .map(ConfigView::bestTotal).toList());
-        List<PricedOffer> priced = PriceOutliers.markBelow(PriceOutliers.mark(stored.stream()
-                .map(s -> pricer.price(OfferData.of(s), ctx, coupon, refreshed.contains(s.mallProductId())))
-                .toList()), familyRef).stream().sorted(ViewFactory.OFFER_ORDER).toList();
+        // 이상 가격은 검색 · 찜 목록과 같은 규칙 (다른 구성 · 같은 시리즈와 비교)
+        ProductGroup group = outliers.judge(pricer.groups(stored, ctx, coupon, refreshed), ctx).getFirst();
+        List<PricedOffer> priced = group.offers().stream().sorted(ViewFactory.OFFER_ORDER).toList();
         StoredOffer meta = stored.getFirst();
         List<String> extra = new ArrayList<>();
         Long currentBest = priced.stream().filter(PricedOffer::comparable).map(p -> p.normal().totalAmountKrw())
                 .min(Long::compare).orElse(null);
         Long low30 = repository.lowestBetween(productId, ctx.now().minusDays(30), ctx.now().plusSeconds(1));
         if (currentBest != null && low30 != null && currentBest <= low30) extra.add(ViewFactory.BADGE_LOW_30D);
-        ProductSummary s = views.summary(new ProductGroup(productId, meta.productName(), meta.imageUrl(), priced),
-                ctx, extra, meta, Integer.MAX_VALUE);
+        ProductSummary s = views.summary(group.withOffers(priced), ctx, extra, meta, Integer.MAX_VALUE);
+        List<ConfigView> cfg = configs(group, s.bestTotal(), s.offerCount(), ctx);
 
         Set<Long> mallIds = stored.stream().map(StoredOffer::mallId).collect(Collectors.toSet());
         List<EventView> events = rules.activeEventsOverlapping(ctx.now(), ctx.now().plusYears(1)).stream()
@@ -134,40 +135,32 @@ public class ProductService {
                 : priced.stream().anyMatch(p -> p.status() == PriceStatus.stale) ? "stale" : "ok";
         if (priced.stream().noneMatch(PricedOffer::comparable)) priceStatus = "unavailable";
         LocalDateTime fetchedAt = stored.stream().map(StoredOffer::fetchedAt).filter(Objects::nonNull)
-                .max(LocalDateTime::compareTo).map(t -> t.truncatedTo(java.time.temporal.ChronoUnit.SECONDS))
+                .max(LocalDateTime::compareTo).map(t -> t.truncatedTo(ChronoUnit.SECONDS))
                 .orElse(null);
         return new ProductDetail(productId, meta.productName(), meta.brandName(), meta.modelNumber(), null,
                 meta.description(), meta.imageUrl(), s.categoryName(), null, null, s.badges(), s.bestTotal(),
                 s.bestNormalTotal(), s.bestStore(), s.offerCount(), s.offers(), s.offers(), events,
-                views.rates(ctx.fx()), priceStatus, fetchedAt, wished, cfg.stream()
-                        .map(c -> c.current() ? new ConfigView(c.productId(), c.label(), s.bestTotal(), s.offerCount(),
-                                c.storageGb(), true) : c)
-                        .toList());
+                views.rates(ctx.fx()), priceStatus, fetchedAt, wished, cfg, s.colors());
     }
 
-    /** 같은 모델(용량 등만 다름)의 다른 상품들. 구성이 하나뿐이거나 구성을 모르는 상품이면 빈 목록 */
-    List<ConfigView> configs(long productId, Long currentBest, int currentCount) {
-        ProductMatcher.Config me = ProductMatcher.config(repository.matchKey(productId));
+    /**
+     * 같은 모델(용량 등만 다름)의 다른 상품들 (지금 상품 포함, 작은 구성부터).
+     * 다른 상품의 최저가는 저장된 가격 기준. 구성이 하나뿐이거나 구성을 모르는 상품이면 빈 목록
+     */
+    List<ConfigView> configs(ProductGroup current, Long currentBest, int currentCount, OfferPricer.Context ctx) {
+        ProductMatcher.Config me = current.config();
         if (me == null) return List.of();
-        Map<Long, ProductMatcher.Config> family = new LinkedHashMap<>();
-        repository.productsByKeyPrefix(me.family() + "|").forEach((id, key) -> {
-            ProductMatcher.Config c = ProductMatcher.config(key);
-            if (c != null && c.family().equals(me.family())) family.put(id, c);
-        });
-        if (family.size() < 2) return List.of();
-        List<Long> others = family.keySet().stream().filter(id -> id != productId).toList();
-        Map<Long, ProductSummary> sums = summaries(others).stream()
-                .collect(Collectors.toMap(ProductSummary::id, x -> x, (a, b) -> a));
         List<ConfigView> out = new ArrayList<>();
-        family.forEach((id, c) -> {
-            if (id == productId) {
-                out.add(new ConfigView(id, c.label(), currentBest, currentCount, c.storageGb(), true));
-            } else if (sums.containsKey(id)) {
-                ProductSummary x = sums.get(id);
-                out.add(new ConfigView(id, c.label(), x.bestTotal(), x.offerCount(), c.storageGb(), false));
-            }
-        });
-        out.sort(java.util.Comparator.comparingLong(v -> family.get(v.productId()).order()));
+        Map<Long, Long> order = new LinkedHashMap<>();
+        out.add(new ConfigView(current.productId(), me.label(), currentBest, currentCount, me.storageGb(), true));
+        order.put(current.productId(), me.order());
+        for (OutlierService.Member m : outliers.members(me.family() + "|", OutlierService.FAMILY_POOL_LIMIT, ctx)) {
+            ProductMatcher.Config c = ProductMatcher.config(m.matchKey());
+            if (m.productId() == current.productId() || c == null || !c.family().equals(me.family())) continue;
+            out.add(new ConfigView(m.productId(), c.label(), m.best(), m.offerCount(), c.storageGb(), false));
+            order.put(m.productId(), c.order());
+        }
+        out.sort(Comparator.comparingLong(v -> order.get(v.productId())));
         return out.size() < 2 ? List.of() : out;
     }
 
@@ -181,8 +174,7 @@ public class ProductService {
     Set<Long> refresh(List<StoredOffer> stored, OfferPricer.Context ctx) {
         Map<Long, StoredOffer> byMallProduct = new LinkedHashMap<>();
         stored.stream()
-                .sorted(java.util.Comparator.comparing(StoredOffer::fetchedAt,
-                        java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder())))
+                .sorted(Comparator.comparing(StoredOffer::fetchedAt, Comparator.nullsFirst(Comparator.naturalOrder())))
                 .forEach(s -> byMallProduct.putIfAbsent(s.mallProductId(), s));
         record Job(StoredOffer s, MallSource source, Future<List<MallOffer>> future) {
         }
@@ -239,20 +231,19 @@ public class ProductService {
         return new PriceHistory(productId, period == null ? "1m" : period, points, summary);
     }
 
-    /** 저장된 최신값 기준 요약 (외부 호출 없음). 순서는 productIds 순서 */
+    /** 저장된 최신값 기준 요약 (외부 호출 없음, 이상 가격은 검색과 같은 규칙). 순서는 productIds 순서 */
     public List<ProductSummary> summaries(List<Long> productIds) {
         if (productIds.isEmpty()) return List.of();
         OfferPricer.Context ctx = pricer.context();
-        Map<Long, List<StoredOffer>> byProduct = repository.findByProductIds(productIds).stream()
-                .collect(Collectors.groupingBy(StoredOffer::productId, LinkedHashMap::new, Collectors.toList()));
+        List<StoredOffer> stored = repository.findByProductIds(productIds);
+        Map<Long, StoredOffer> meta = new LinkedHashMap<>();
+        stored.forEach(s -> meta.putIfAbsent(s.productId(), s));
+        Map<Long, ProductGroup> judged = new LinkedHashMap<>();
+        outliers.judge(pricer.groups(stored, ctx, false, Set.of()), ctx).forEach(g -> judged.put(g.productId(), g));
         List<ProductSummary> out = new ArrayList<>();
         for (Long id : productIds) {
-            List<StoredOffer> list = byProduct.get(id);
-            if (list == null || list.isEmpty()) continue;
-            List<PricedOffer> priced = PriceOutliers.mark(
-                    list.stream().map(s -> pricer.price(OfferData.of(s), ctx, false, false)).toList());
-            StoredOffer meta = list.getFirst();
-            out.add(views.summary(new ProductGroup(id, meta.productName(), meta.imageUrl(), priced), ctx, null, meta, 3));
+            ProductGroup g = judged.get(id);
+            if (g != null) out.add(views.summary(g, ctx, null, meta.get(id), 3));
         }
         return out;
     }

@@ -19,7 +19,7 @@ class SameProductGrouperTest {
     private static PricedOffer offer(long productId, long variantId, String listingTitle, String image) {
         OfferData d = new OfferData(productId, "Apple iPhone 17 256GB", image, variantId, variantId, 1, null,
                 new BigDecimal("799"), "USD", null, "US", "https://shop/" + variantId, StockStatus.IN_STOCK, null,
-                LocalDateTime.of(2026, 11, 16, 12, 0), null, listingTitle);
+                LocalDateTime.of(2026, 11, 16, 12, 0), null, listingTitle, null, "iphone|17|256");
         return new PricedOffer(d, null, null, PriceStatus.unavailable);
     }
 

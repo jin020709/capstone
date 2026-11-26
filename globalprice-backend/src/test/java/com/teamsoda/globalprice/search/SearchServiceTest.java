@@ -122,17 +122,20 @@ class SearchServiceTest {
             List<OfferData> out = new ArrayList<>();
             for (MallSource.MallOffer o : offers) {
                 long id = ids.incrementAndGet();
-                out.add(new OfferData(id, o.title(), null, id, id, mallId, null, o.price(), o.currencyCode(),
-                        o.shippingFee(), o.originCountry(), "https://shop/" + id, o.stock(), o.shipDays(), NOW, null,
-                        o.title()));
+                // 실제 저장과 같은 팩토리 (출발국 · 색상 계산 포함)
+                out.add(OfferData.of(o, new com.teamsoda.globalprice.catalog.CatalogRepository.SavedIds(
+                        id, id, id, o.title(), null), mallId, malls.get(mallId).countryCode(), NOW));
             }
             return out;
         });
 
         SourceCaller caller = new SourceCaller(new SourceGuard(clock, props), catalog, new ResultFilter(props),
                 mock(SyncLogRepository.class), new AppConfig().cacheManager(props), clock, props);
+        // 이상 가격 비교용 DB 상품은 없음 (가짜 Repository 는 빈 결과)
+        com.teamsoda.globalprice.catalog.OutlierService outliers = new com.teamsoda.globalprice.catalog.OutlierService(
+                mock(com.teamsoda.globalprice.catalog.CatalogRepository.class), pricer, props);
         service = new SearchService(new QueryNormalizer(Map.of("아이폰", "iphone")), directory, caller, pricer,
-                new SameProductGrouper(), new ViewFactory(directory), props);
+                new SameProductGrouper(), outliers, new ViewFactory(directory, props), props);
     }
 
     static MallSource.MallOffer offer(String id, String title, String usd, String shipping,

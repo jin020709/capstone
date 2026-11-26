@@ -30,13 +30,14 @@ public final class TestProps {
                         Duration.ofSeconds(3), Duration.ofMinutes(10), Duration.ofHours(6)),
                 new GlobalPriceProperties.Pricing("해외 결제 수수료"),
                 new GlobalPriceProperties.Home(List.of()),
-                new GlobalPriceProperties.Filter(List.of("used", "refurbished", "중고"), List.of("case", "케이스")),
+                RealConfig.filter(List.of("used", "refurbished", "중고"), List.of("case", "케이스")),
                 new GlobalPriceProperties.Sources(
                         new Ebay(true, "id", "secret", true, 3000, base, base + "/identity/v1/oauth2/token"),
                         new Shopify(true, "https://example.test/profile.json", 3000, base + "/api/ucp/mcp"),
                         new AliExpress(true, "key", "secret", "track", 3000, base + "/sync"),
                         new Etsy(true, "keystring:secret", 3000, base),
-                        new KoreaExim("auth", base + "/exchangeJSON")));
+                        new KoreaExim("auth", base + "/exchangeJSON")),
+                RealConfig.outliers(), RealConfig.display());
     }
 
     public static RestClient.Builder rest(GlobalPriceProperties props) {

@@ -30,7 +30,8 @@ public class SameProductGrouper implements ProductGrouper {
             PricedOffer first = list.getFirst();
             String image = list.stream().map(x -> x.data().imageUrl()).filter(i -> i != null && !i.isBlank())
                     .findFirst().orElse(null);
-            out.add(new ProductGroup(first.data().productId(), first.data().productName(), image, List.copyOf(list)));
+            out.add(new ProductGroup(first.data().productId(), first.data().productName(), image,
+                    first.data().matchKey(), List.copyOf(list)));
         }
         return out;
     }

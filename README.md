@@ -115,8 +115,9 @@ MySQL 8.0 (테이블 19개)
 - 새 상품 위주로 보여주며, 한국으로 배송할 수 없는 상품은 제외합니다.
 - 판매처 · 구매 국가 · 가격 · 무료배송 · 쿠폰 적용 필터와 정렬을 지원합니다.
 - 같은 검색어는 10분 동안 캐시해서 두 번째부터 1초 안에 응답합니다. (처음 검색은 약 5초 이내)
-- 한글 검색어는 별칭 사전으로 영문으로 바꿔 검색합니다. (예: 아이폰 → iphone)
+- 한글 검색어는 DB 별칭 사전(`search_aliases`)으로 영문으로 바꿔 검색합니다. (예: 아이폰 → iphone, 케이스 → case)
 - 일부 쇼핑몰 API가 실패해도 나머지 결과는 그대로 보여줍니다. (부분 응답)
+- 판매처가 달라도 같은 모델 + 같은 용량이면 상품 하나로 묶습니다. 아이폰 · 갤럭시 · 픽셀 · 맥북 · 아이패드는 전용 규칙, 그 밖의 휴대폰 · 태블릿은 Google Play 지원 기기 목록(약 2.7만 모델)으로 찾습니다.
 
 | 검색 결과 |
 | --- |
@@ -171,6 +172,7 @@ MySQL 8.0 (테이블 19개)
 | AliExpress | 제휴 앱 키로 실제 검색 확인 (키 필요) |
 | Etsy | 실제 검색 확인 (키 필요), 수공예 · 빈티지 상품 위주 |
 | 한국수출입은행 환율 | 실제 키로 확인 (22개 통화) |
+| Google Play 지원 기기 목록 | 키 없음. 서버가 처음 켜질 때(테이블이 비어 있으면) 내려받아 DB 에 넣고, 그 뒤 7일마다 갱신 |
 
 키가 없는 쇼핑몰은 오류 없이 검색 결과에 `skipped` 로만 표시됩니다.
 
@@ -191,6 +193,9 @@ MySQL 8.0 (테이블 19개)
 05_migration_002.sql    (검색어 별칭 테이블)
 06_migration_003.sql    (옵션 정규화 컬럼)
 07_migration_004.sql    (같은 상품 묶기 컬럼 · 필수: 없으면 검색이 실패해요)
+08_migration_005.sql    (한영 검색어 별칭 · 필수: 없으면 한글 검색어가 번역되지 않아요)
+09_migration_006.sql    (갤럭시 모델번호 · 없으면 일부 갤럭시 모델이 같은 상품으로 안 묶여요)
+10_migration_007.sql    (휴대폰 · 태블릿 모델 목록 테이블 · 행은 서버가 Google Play 기기 목록에서 자동으로 채워요)
 ```
 
 마이그레이션은 이미 적용돼 있으면 건너뛰므로 여러 번 실행해도 안전합니다. 시연용 가짜 가격 이력이 필요하면 상품을 몇 번 검색한 뒤 `90_demo_price_history.sql`을 실행합니다 (운영 DB에는 넣지 마세요).
@@ -206,6 +211,7 @@ API 키와 DB 비밀번호는 **저장소에 올리지 않고 환경 변수로�
 | `ALI_APP_KEY` · `ALI_APP_SECRET` | AliExpress 제휴 앱 키 | AliExpress 검색 안 함 |
 | `ETSY_API_KEY` | `keystring:shared_secret` 형식 | Etsy 검색 안 함 |
 | `KOREAEXIM_KEY` | 한국수출입은행 환율 인증키 | 환율 수집 안 함 |
+| `DEVICE_CATALOG_ENABLED` | `false`면 기기 목록을 내려받지 않음 (DB 에 있는 행만 씀) | 켜짐 |
 
 Windows PowerShell에서 한 번만 등록하면 재부팅 후에도 유지됩니다. 값은 변수마다 한 줄씩 넣습니다.
 
@@ -222,7 +228,9 @@ cd globalprice-backend
 ./gradlew bootRun              # Mac · Linux
 ```
 
-Eclipse에서는 `File → Import → Gradle → Existing Gradle Project`로 `globalprice-backend`를 가져온 뒤, `GlobalPriceApplication`을 `Run As → Java Application`으로 실행해도 됩니다.
+처음 켤 때 서버가 Google Play 기기 목록(약 5MB)을 인터넷에서 받아 DB 에 넣습니다 (약 15초 뒤, 로그 `기기 모델 목록을 새로 받았어요`). 받기 전이거나 인터넷이 없으면 아이폰 · 갤럭시 · 픽셀 · 맥북 · 아이패드 밖의 휴대폰은 같은 상품으로 묶이지 않습니다.
+
+Eclipse에서는 `File → Import → Gradle → Existing Gradle Project`로 `globalprice-backend`를 가져온 뒤, **Gradle Tasks 창의 `application → bootRun`** 으로 실행합니다. (화면 파일은 Gradle 빌드가 `GlobalPrice_frontend`에서 복사하므로, `Run As → Java Application`으로 바로 실행하면 화면이 안 나올 수 있어요.)
 
 ### 6-4. 접속
 브라우저에서 http://localhost:8080 을 엽니다. 화면과 API를 같은 서버에서 제공합니다.
@@ -266,13 +274,13 @@ globalprice-main
 └─ README.md
 ```
 
-> 백엔드의 `src/main/resources/static/` 은 `GlobalPrice_frontend/static/` 의 **복사본**입니다. 프론트 원본을 고치면 백엔드 쪽에도 다시 복사해 주세요. (다른 점은 `js/config.js`의 `USE_MOCK: false` 한 줄뿐입니다.)
+> 화면 파일은 `GlobalPrice_frontend/static/` 한 곳에만 있습니다. 서버를 빌드할 때 Gradle이 백엔드로 복사하면서 `js/config.js`의 `USE_MOCK`만 `false`로 바꿔요. 프론트를 고친 뒤 따로 복사할 필요 없이 서버만 다시 켜면 됩니다.
 
 <br>
 
 ## 9. 알려진 한계 · 개선 예정
 
-- 같은 상품 묶기는 아이폰 · 갤럭시 · 픽셀 · 맥북 · 아이패드는 모델 + 용량 기준, 그 밖의 상품은 모델코드나 상품명이 같을 때만 묶습니다. 이름이 조금만 달라도 따로 나올 수 있습니다.
+- 같은 상품 묶기는 휴대폰 · 태블릿(전용 규칙 5개 + Google Play 기기 목록)만 모델 + 용량 기준이고, 그 밖의 상품은 모델코드나 상품명이 같을 때만 묶습니다. 이름이 조금만 달라도 따로 나올 수 있습니다. Google Play 인증이 없는 기기(화웨이 최신 폰, 레노버 중국 내수 태블릿 등)는 목록에 없습니다.
 - 케이스 · 필름 같은 **액세서리와 비정상적으로 낮은 가격**은 제외 키워드와 이상 가격 판정으로 거르지만, 이름에 표시가 없거나 판매처가 1곳뿐인 상품은 일부 섞일 수 있습니다.
 - 같은 날 여러 상품을 사는 **합산 과세**는 계산하지 않습니다. (상품 1개 기준 예상 금액)
 - 통관 시 확정 세액을 보장하지 않으며, 화면의 금액은 **예상 금액**입니다.

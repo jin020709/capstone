@@ -10,7 +10,8 @@ import com.teamsoda.globalprice.config.GlobalPriceProperties;
 import com.teamsoda.globalprice.source.MallSource.MallOffer;
 
 /**
- * 1차 걸러내기: 새 상품만 · 액세서리 · 부품 제외. 키워드는 application.yml(globalprice.filter) 에서 관리.
+ * 1차 걸러내기: 새 상품만 · 액세서리 · 부품 · 통신사 잠김 · 시계 밴드 제외. 키워드는 application.yml(globalprice.filter).
+ * 박스만 파는 리스팅 · "for iPhone" 표기는 문장 구조를 보는 정규식이라 코드에 둔다.
  * 영문 키워드는 단어 경계로 비교한다 ("case" 는 걸러도 "showcase" 는 통과, 복수형 cases 도 걸림).
  * "for iPhone" 같은 호환 액세서리 표기, 검색한 브랜드 앞에 for / compatible with 가 붙은 표기("Stand for Sony ...")도 제외.
  */
@@ -28,15 +29,21 @@ public class ResultFilter {
 
     private final List<Pattern> notNew;
     private final List<Pattern> accessory;
+    private final Pattern carrier;
+    private final Pattern unlocked;
+    private final Pattern watchBand;
 
     @org.springframework.beans.factory.annotation.Autowired
     public ResultFilter(GlobalPriceProperties props) {
-        this(props.filter().notNewKeywords(), props.filter().accessoryKeywords());
+        this(props.filter());
     }
 
-    ResultFilter(List<String> notNewKeywords, List<String> accessoryKeywords) {
-        this.notNew = notNewKeywords.stream().map(ResultFilter::pattern).toList();
-        this.accessory = accessoryKeywords.stream().map(ResultFilter::pattern).toList();
+    ResultFilter(GlobalPriceProperties.Filter f) {
+        this.notNew = f.notNewKeywords().stream().map(ResultFilter::pattern).toList();
+        this.accessory = f.accessoryKeywords().stream().map(ResultFilter::pattern).toList();
+        this.carrier = anyOf(f.carrierKeywords());
+        this.unlocked = anyOf(f.unlockedKeywords());
+        this.watchBand = anyOf(f.watchBandKeywords());
     }
 
     /**
@@ -57,10 +64,10 @@ public class ResultFilter {
             if (p.matcher(title).find() && !inQuery) return false;
         }
         // 시계를 찾는데 밴드 · 루프만 파는 리스팅 ("Apple Watch Ultra 1/2/3 Band Black Titanium")
-        if (WATCH.matcher(q).find() && !WATCH_BAND.matcher(q).find() && WATCH_BAND.matcher(title).find()) return false;
+        if (WATCH.matcher(q).find() && !watchBand.matcher(q).find() && watchBand.matcher(title).find()) return false;
 
         // 미국 통신사 잠김 폰 (AT&T · Verizon 등): 한국에서 개통이 안 돼 비교 대상이 아님. "Unlocked" 가 같이 있으면 통과
-        if (CARRIER.matcher(title).find() && !UNLOCKED.matcher(title).find() && !CARRIER.matcher(q).find()) return false;
+        if (carrier.matcher(title).find() && !unlocked.matcher(title).find() && !carrier.matcher(q).find()) return false;
 
         // "for iPhone" 같은 호환 상품 표기: 사용자가 액세서리를 찾는 중이 아니면 제외
         if (wantsAccessory || FOR_MODEL.matcher(q).find() || FOR_ANY.matcher(q).find()) return true;
@@ -70,15 +77,12 @@ public class ResultFilter {
     }
 
     private static final Pattern WATCH = Pattern.compile("(?<![a-z])watch(?![a-z])");
-    private static final Pattern WATCH_BAND = Pattern.compile("(?<![a-z])(bands?|loops?|straps?|bracelets?)(?![a-z])",
-            Pattern.CASE_INSENSITIVE);
 
-    static final Pattern CARRIER = Pattern.compile(
-            "(?<![a-z])(at&t|at ?& ?t|verizon|t-?mobile|sprint|cricket|boost mobile|metro ?pcs|metro by t-?mobile"
-                    + "|us cellular|xfinity|visible wireless|tracfone|straight talk|spectrum mobile|carrier locked)(?![a-z])",
-            Pattern.CASE_INSENSITIVE);
-    static final Pattern UNLOCKED = Pattern.compile("(?<![a-z])(unlocked|sim[- ]?free|factory unlocked)(?![a-z])",
-            Pattern.CASE_INSENSITIVE);
+    /** 정규식 목록 중 하나라도 (영문 단어 경계). 목록이 비면 아무것도 안 걸림 */
+    static Pattern anyOf(List<String> regexes) {
+        if (regexes.isEmpty()) return Pattern.compile("(?!)");
+        return Pattern.compile("(?<![a-z])(" + String.join("|", regexes) + ")(?![a-z])", Pattern.CASE_INSENSITIVE);
+    }
 
     private static final Pattern FOR_ANY = Pattern.compile("\\b(for|compatible with|fits)\\b");
 

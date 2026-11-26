@@ -16,26 +16,42 @@ public final class Offers {
 
     /**
      * 저장된(또는 방금 저장한) offer 1건. productId 가 반드시 있다.
-     * productName = 묶인 상품의 대표 이름, listingTitle = 쇼핑몰에 올라온 원래 상품명 (판매처 줄 표시용)
+     * <ul>
+     *   <li>productName = 묶인 상품의 대표 이름, listingTitle = 쇼핑몰에 올라온 원래 상품명 (판매처 줄 표시용)</li>
+     *   <li>origin = {@link Origin} 으로 정한 출발국 (모르면 null). 계산 · 화면 · 필터가 모두 이 값을 쓴다</li>
+     *   <li>color = 상품명 · 옵션 이름 속 색상 ({@link ColorName}, 없으면 null)</li>
+     *   <li>matchKey = 묶인 상품의 products.match_key (없으면 null)</li>
+     * </ul>
+     * 출발국 · 색상은 만들 때 한 번만 계산한다 (곳곳에서 따로 계산하면 규칙이 어긋남).
      */
     public record OfferData(long productId, String productName, String imageUrl, long mallProductId,
                             long mallVariantId, long mallId, String variantName, BigDecimal price, String currency,
-                            BigDecimal shippingFee, String originCountry, String productUrl, StockStatus stock,
-                            Integer shipDays, LocalDateTime fetchedAt, Long categoryId, String listingTitle) {
+                            BigDecimal shippingFee, String origin, String productUrl, StockStatus stock,
+                            Integer shipDays, LocalDateTime fetchedAt, Long categoryId, String listingTitle,
+                            String color, String matchKey) {
 
-        public static OfferData of(MallOffer o, CatalogRepository.SavedIds ids, long mallId, LocalDateTime fetchedAt) {
+        /** 방금 쇼핑몰에서 받아 저장한 offer. mallCountry = shopping_malls.country_code */
+        public static OfferData of(MallOffer o, CatalogRepository.SavedIds ids, long mallId, String mallCountry,
+                                   LocalDateTime fetchedAt) {
             String name = ids.productName() != null ? ids.productName() : o.title();
             return new OfferData(ids.productId(), name, o.imageUrl(), ids.mallProductId(), ids.mallVariantId(),
-                    mallId, o.variantName(), o.price(), o.currencyCode(), o.shippingFee(), o.originCountry(),
-                    o.productUrl(), o.stock() == null ? StockStatus.UNKNOWN : o.stock(), o.shipDays(), fetchedAt,
-                    null, o.title());
+                    mallId, o.variantName(), o.price(), o.currencyCode(), o.shippingFee(),
+                    Origin.of(o.originCountry(), o.currencyCode(), mallCountry), o.productUrl(),
+                    o.stock() == null ? StockStatus.UNKNOWN : o.stock(), o.shipDays(), fetchedAt, null, o.title(),
+                    colorOf(o.title(), o.variantName()), ids.matchKey());
         }
 
-        public static OfferData of(CatalogRepository.StoredOffer s) {
+        /** DB 에서 다시 읽은 offer (출발국은 저장하지 않으므로 통화 · 쇼핑몰 나라로 정함) */
+        public static OfferData of(CatalogRepository.StoredOffer s, String mallCountry) {
+            String title = s.listingTitle() != null ? s.listingTitle() : s.productName();
             return new OfferData(s.productId(), s.productName(), s.imageUrl(), s.mallProductId(), s.mallVariantId(),
-                    s.mallId(), s.variantName(), s.currentPrice(), s.currencyCode(), s.shippingFee(), null,
-                    s.productUrl(), s.stockStatus(), null, s.fetchedAt(), s.categoryId(),
-                    s.listingTitle() != null ? s.listingTitle() : s.productName());
+                    s.mallId(), s.variantName(), s.currentPrice(), s.currencyCode(), s.shippingFee(),
+                    Origin.of(null, s.currencyCode(), mallCountry), s.productUrl(), s.stockStatus(), null,
+                    s.fetchedAt(), s.categoryId(), title, colorOf(title, s.variantName()), s.matchKey());
+        }
+
+        static String colorOf(String title, String variantName) {
+            return ColorName.of((title == null ? "" : title) + (variantName == null ? "" : " " + variantName));
         }
     }
 
@@ -60,8 +76,19 @@ public final class Offers {
         }
     }
 
-    /** 같은 상품으로 묶인 offer 들 (같은 productId) */
-    public record ProductGroup(long productId, String productName, String imageUrl, List<PricedOffer> offers) {
+    /** 같은 상품으로 묶인 offer 들 (같은 productId). matchKey = products.match_key (없으면 null) */
+    public record ProductGroup(long productId, String productName, String imageUrl, String matchKey,
+                               List<PricedOffer> offers) {
+
+        public ProductGroup withOffers(List<PricedOffer> newOffers) {
+            return new ProductGroup(productId, productName, imageUrl, matchKey, newOffers);
+        }
+
+        /** 묶기 키의 모델 · 구성 (아이폰 · 갤럭시 · 픽셀 · 맥북 · 아이패드만, 그 밖에는 null) */
+        public ProductMatcher.Config config() {
+            return ProductMatcher.config(matchKey);
+        }
+
         public PricedOffer best() {
             return offers.stream().filter(PricedOffer::comparable)
                     .min(java.util.Comparator.comparingLong(PricedOffer::total))

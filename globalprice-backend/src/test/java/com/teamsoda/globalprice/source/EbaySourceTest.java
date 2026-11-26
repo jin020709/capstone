@@ -164,7 +164,7 @@ class EbaySourceTest {
         var noKey = new GlobalPriceProperties(base.zone(), base.search(), base.pricing(), base.home(), base.filter(),
                 new GlobalPriceProperties.Sources(new GlobalPriceProperties.Ebay(true, "", "", true, 10, null, null),
                         base.sources().shopify(), base.sources().aliexpress(), base.sources().etsy(),
-                        base.sources().koreaexim()));
+                        base.sources().koreaexim()), base.outliers(), base.display());
         assertThat(new EbaySource(noKey, TestProps.rest(noKey), TestProps.MAPPER, Clock.systemUTC()).enabled()).isFalse();
     }
 

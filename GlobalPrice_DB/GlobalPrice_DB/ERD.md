@@ -3,7 +3,10 @@
 `02_create_tables.sql` 기준 · MySQL 8.0.16+ · 19개 테이블 · 외래 키 24개
 `05_migration_002.sql` 적용 후 · 20개 테이블 · 외래 키 25개 (`search_aliases` 추가)
 `06_migration_003.sql` 적용 후 · `mall_product_variants.normalized_option_key` 컬럼 추가
-`07_migration_004.sql` 적용 후 · `products.match_key`(UK, 같은 상품 묶기 키) · `mall_products.listing_title`(쇼핑몰 원래 상품명) 컬럼 추가 → `products` 1 : `mall_products` N (그림에는 아직 반영 안 됨, BACKEND_SPEC.md 4-5 참고)
+`07_migration_004.sql` 적용 후 · `products.match_key`(UK, 같은 상품 묶기 키) · `mall_products.listing_title`(쇼핑몰 원래 상품명) 컬럼 추가 → `products` 1 : `mall_products` N (BACKEND_SPEC.md 4-5)
+`08_migration_005.sql` 적용 후 · `search_aliases.alias_source` 컬럼 추가 (`MANUAL` · `AUTO`, CHECK `chk_search_alias_source`). 백엔드가 이 테이블로 한글 검색어를 영어로 바꿈
+`09_migration_006.sql` 적용 후 · 21개 테이블 (`model_codes` 추가: 제조사 모델번호 → 묶기 키 앞부분, `model_code` UK, 외래 키 없음). 백엔드가 같은 상품 묶기에 씀 (BACKEND_SPEC.md 4-5)
+`10_migration_007.sql` 적용 후 (현재) · 22개 테이블 · 외래 키 25개 · CHECK 27개 (`device_models` 추가: 휴대폰 · 태블릿 모델, `model_key` UK, 외래 키 없음). `model_codes` 에 `brand` · `source`(MANUAL · GPLAY) 컬럼. 행은 백엔드가 Google Play 지원 기기 목록에서 채움
 
 - 표기: `PK` 기본키, `FK` 외래키, `UK` 단일 컬럼 UNIQUE
 - 여러 컬럼을 묶은 UNIQUE(복합 · 함수형)는 그림에 표시하지 않고 [5. UNIQUE 제약](#5-unique-제약) 표에 정리
@@ -40,9 +43,11 @@ erDiagram
     price_alerts ||--o{ notifications : "발송 내역"
 ```
 
+- `model_codes` · `device_models`(마이그레이션 006 · 007)는 외래 키가 없어 그림에 선이 없어요. `model_codes.model_key` · `device_models.model_key` 값이 `products.match_key`의 앞부분(용량을 뺀 부분)과 같은 형식이에요 (예: `dev|poco|poco x6 pro 5g` → `dev|poco|poco x6 pro 5g|512`).
+
 ## 2. 영역별 테이블
 
-5개 영역 17개 테이블 + 추가 제안 2개 = 19개
+5개 영역 17개 테이블 + 추가 제안 2개 = 19개, 마이그레이션으로 +3개 = 22개
 
 | 영역 | 수 | 테이블 | 저장하는 것 |
 |---|---|---|---|
@@ -53,6 +58,7 @@ erDiagram
 | 사용자 편의 (선택) | 3 | WISHLISTS · PRICE_ALERTS · NOTIFICATIONS | 찜, 목표 가격, 알림 |
 | 추가 제안 | +2 | PRICE_HISTORY · STORE_EVENTS | 가격 변동 그래프, 이번 달 행사 · 쿠폰 화면용 |
 | 검색 (마이그레이션 002) | +1 | SEARCH_ALIASES | 한글 · 별칭 검색어 → API 검색어 · 브랜드 · 모델번호 |
+| 같은 상품 묶기 (마이그레이션 006 · 007) | +2 | MODEL_CODES · DEVICE_MODELS | 제조사 모델번호 → 모델, 휴대폰 · 태블릿 모델 목록 (사람이 넣은 MANUAL + Google Play 목록에서 자동 GPLAY) |
 
 설계 원칙
 
@@ -87,6 +93,7 @@ erDiagram
         BIGINT category_id FK
         VARCHAR product_name
         VARCHAR model_number
+        VARCHAR match_key UK
         TEXT description
         VARCHAR image_url
         DATETIME created_at
@@ -103,6 +110,7 @@ erDiagram
         BIGINT product_id FK
         BIGINT mall_id FK
         VARCHAR external_product_id
+        VARCHAR listing_title
         VARCHAR product_url
         CHAR currency_code
         DECIMAL shipping_fee
@@ -239,6 +247,26 @@ erDiagram
         VARCHAR search_term
         BIGINT brand_id FK
         VARCHAR model_number
+        VARCHAR alias_source
+        BOOLEAN is_active
+        DATETIME created_at
+    }
+    MODEL_CODES {
+        BIGINT model_code_id PK
+        VARCHAR model_code UK
+        VARCHAR model_key
+        VARCHAR model_name
+        VARCHAR brand
+        VARCHAR source
+        BOOLEAN is_active
+        DATETIME created_at
+    }
+    DEVICE_MODELS {
+        BIGINT device_model_id PK
+        VARCHAR model_key UK
+        VARCHAR brand
+        VARCHAR model_name
+        VARCHAR source
         BOOLEAN is_active
         DATETIME created_at
     }
@@ -301,6 +329,7 @@ erDiagram
 | search_aliases.brand_id | brands | CASCADE |
 
 - `search_aliases.model_number`는 FK가 아니에요. `(brand_id, model_number)` 값으로 `products`(uq_product_brand_model)와 맞춰요.
+- `model_codes` · `device_models`는 외래 키가 없어요. 값(`model_key`)으로 묶기 키와 맞춰요. `source = 'GPLAY'` 행은 백엔드가 7일마다 지우고 다시 넣어요.
 
 ## 5. UNIQUE 제약
 
@@ -314,6 +343,7 @@ erDiagram
 | price_calculations | mall_variant_id | mall_variant_id (옵션당 계산 1건) |
 | categories | uq_category_parent_name | IFNULL(parent_category_id, 0), category_name |
 | products | uq_product_brand_model | brand_id, model_number |
+| products | uq_products_match_key | match_key (같은 상품 묶기 키, 마이그레이션 004) |
 | mall_products | uq_mall_external_product | mall_id, external_product_id |
 | mall_product_variants | uq_variant_external | mall_product_id, external_variant_id |
 | exchange_rates | uq_exchange_currency_date | currency_code, base_date |
@@ -322,8 +352,10 @@ erDiagram
 | wishlists | uq_user_product | user_id, product_id |
 | price_alerts | uq_alert_user_target | user_id, alert_basis, IFNULL(product_id, 0), IFNULL(store_event_id, 0) |
 | search_aliases | uq_search_alias_target | alias_text, IFNULL(brand_id, 0), IFNULL(model_number, '') |
+| model_codes | uq_model_codes_code | model_code (마이그레이션 006) |
+| device_models | uq_device_models_key | model_key (마이그레이션 007) |
 
-## 6. CHECK 제약 (18개)
+## 6. CHECK 제약 (27개)
 
 | 테이블 | 제약 이름 | 조건 |
 |---|---|---|
@@ -340,14 +372,6 @@ erDiagram
 | store_events | chk_event_discount_value | RATE 0 초과 1 이하, AMOUNT 0 초과, 최소구매 ≥ 0, 최대할인은 RATE 에만 (> 0) |
 | price_calculations | chk_calculation_parts | 모든 금액 ≥ 0, 할인 ≤ 상품가 |
 | price_calculations | chk_calculation_total | total = 상품가 + 배송비 − 할인 + 관세 + 부가세 + 수수료 |
-
-## 7. 할인 정책
-
-| 구분 | 규칙 |
-|---|---|
-| SALE | 정률(RATE) · 정액(AMOUNT) 모두 지원. 할인 정보 없는 SALE 도 허용 (가격에 이미 반영된 세일, 안내 · 알림용) |
-| COUPON | 할인 정보 필수. 기간 · is_active · 최소 구매금액 조건을 충족할 때만 적용 |
-| 중복 적용 | 불가. 계산 1건에 행사 1건 (`price_calculations.applied_event_id`), 할인액은 `discount_amount_krw` |
 | api_sync_logs | chk_sync_status | status ∈ RUNNING, SUCCESS, PARTIAL, FAILED |
 | api_sync_logs | chk_sync_counts | 건수 ≥ 0, completed_at ≥ started_at |
 | price_alerts | chk_alert_target | 알림 유형별 product_id / store_event_id / target_price_krw 조합 |
@@ -356,3 +380,17 @@ erDiagram
 | search_aliases | chk_search_alias_text | alias_text · search_term 이 빈 문자열이 아님 (마이그레이션 002) |
 | search_aliases | chk_search_alias_model | model_number 가 NULL 이거나 빈 문자열이 아님 (마이그레이션 002) |
 | mall_product_variants | chk_variant_option_key | normalized_option_key 가 NULL 이거나 빈 문자열이 아님 (마이그레이션 003) |
+| search_aliases | chk_search_alias_source | alias_source ∈ MANUAL, AUTO (마이그레이션 005) |
+| model_codes | chk_model_codes_code | model_code 가 소문자 · 앞뒤 공백 없음 · 빈 문자열 아님 · "sm-" 로 시작하지 않음 (마이그레이션 006) |
+| model_codes | chk_model_codes_key | model_key 가 빈 문자열이 아님 (마이그레이션 006) |
+| model_codes | chk_model_codes_source | source ∈ MANUAL, GPLAY (마이그레이션 007) |
+| device_models | chk_device_models_source | source ∈ MANUAL, GPLAY (마이그레이션 007) |
+| device_models | chk_device_models_key | model_key 가 'dev\|' 로 시작 (마이그레이션 007) |
+
+## 7. 할인 정책
+
+| 구분 | 규칙 |
+|---|---|
+| SALE | 정률(RATE) · 정액(AMOUNT) 모두 지원. 할인 정보 없는 SALE 도 허용 (가격에 이미 반영된 세일, 안내 · 알림용) |
+| COUPON | 할인 정보 필수. 기간 · is_active · 최소 구매금액 조건을 충족할 때만 적용 |
+| 중복 적용 | 불가. 계산 1건에 행사 1건 (`price_calculations.applied_event_id`), 할인액은 `discount_amount_krw` |

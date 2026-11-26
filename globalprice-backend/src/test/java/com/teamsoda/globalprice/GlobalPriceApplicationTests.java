@@ -37,12 +37,40 @@ class GlobalPriceApplicationTests extends IntegrationTestBase {
                 .andExpect(jsonPath("$.offers[?(@.storeName=='Amazon US')].total").value(1187256))
                 .andExpect(jsonPath("$.offers[?(@.storeName=='Amazon US')].totalNormal").value(1264956))
                 .andExpect(jsonPath("$.offers[?(@.storeName=='Rakuten Japan')].total").value(1254855))
-                .andExpect(jsonPath("$.bestTotal").value(1187256));
+                .andExpect(jsonPath("$.bestTotal").value(1187256))
+                .andExpect(jsonPath("$.colors").isArray());   // 색상별 최저가 (색상이 2개 미만이면 빈 배열)
         mvc.perform(get("/api/products/999999")).andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PRODUCT_NOT_FOUND"));
         mvc.perform(get("/api/products/1/price-history").param("period", "1y")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.points").isArray());
         mvc.perform(get("/api/products/1/price-history").param("period", "5d")).andExpect(status().isBadRequest());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    com.teamsoda.globalprice.search.QueryNormalizer normalizer;
+
+    /** 검색어 별칭은 DB search_aliases 에서 읽는다 (05 · 08 마이그레이션). 모델번호 행 · 띄어쓰기 별칭은 단어 변환에 안 씀 */
+    @Test
+    void searchAliases_fromDatabase() {
+        org.assertj.core.api.Assertions.assertThat(normalizer.normalize("아이폰 17 케이스").sourceQuery())
+                .isEqualTo("iphone 17 case");
+        org.assertj.core.api.Assertions.assertThat(normalizer.normalize("핸드폰 필름").sourceQuery())
+                .isEqualTo("phone screen protector");
+        Integer modelRows = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM search_aliases WHERE model_number IS NOT NULL", Integer.class);
+        org.assertj.core.api.Assertions.assertThat(modelRows).isPositive();   // 03 시드 상품의 모델번호 별칭이 있어도 영향 없음
+    }
+
+    /** 갤럭시 모델번호는 DB model_codes 에서 읽는다 (09 마이그레이션). 내장 목록에 없는 Fold5 도 묶인다 */
+    @Test
+    void galaxyModelCodes_fromDatabase(@org.springframework.beans.factory.annotation.Autowired com.teamsoda.globalprice.catalog.ModelCodes modelCodes) {
+        modelCodes.reload();
+        try {
+            org.assertj.core.api.Assertions.assertThat(com.teamsoda.globalprice.catalog.ProductMatcher
+                    .match("Samsung SM-F946B/DS 512GB").key()).isEqualTo("galaxy|z fold|5||512");
+        } finally {
+            com.teamsoda.globalprice.catalog.ProductMatcher.useGalaxyCodes(null);
+        }
     }
 
     @Test

@@ -39,9 +39,12 @@ public class ViewFactory {
     public static final String BADGE_LOW_30D = "최근 30일 최저";
 
     private final MallDirectory malls;
+    private final List<String> platformDomains;
 
-    public ViewFactory(MallDirectory malls) {
+    public ViewFactory(MallDirectory malls, com.teamsoda.globalprice.config.GlobalPriceProperties props) {
         this.malls = malls;
+        this.platformDomains = props.display().platformDomains().stream()
+                .map(d -> d.toLowerCase(Locale.ROOT)).toList();
     }
 
     /** 순서: 비교 대상(예상 구매비용 → shipDays → 쇼핑몰 이름) → 품절 → 이상 가격 → 조회 불가 */
@@ -55,7 +58,7 @@ public class ViewFactory {
         OfferData d = p.data();
         Mall mall = ctx.malls().get(d.mallId());
         String storeName = mall == null ? "쇼핑몰 " + d.mallId() : mall.mallName();
-        String country = Origin.of(d.originCountry(), d.currency(), mall == null ? null : mall.countryCode());
+        String country = d.origin();
         Breakdown b = p.applied();
         LocalDateTime fetched = d.fetchedAt() == null ? null : d.fetchedAt().truncatedTo(ChronoUnit.SECONDS);
         CalcView calc = null;
@@ -86,11 +89,7 @@ public class ViewFactory {
                 p.status() == PriceStatus.unavailable ? null : d.price(), shipping, shippingNote, d.productUrl(),
                 d.imageUrl(), ev, false, d.shipDays(), deliveryDays, calc, p.total(),
                 p.normal() == null ? null : p.normal().totalAmountKrw(), rate, d.listingTitle(), seller(d.productUrl()),
-                colorOf(d));
-    }
-
-    public static String colorOf(OfferData d) {
-        return ColorName.of(d.listingTitle() + (d.variantName() == null ? "" : " " + d.variantName()));
+                d.color());
     }
 
     /** 색상별 최저 예상 구매비용 (비교 가능한 판매처 기준, 싼 색상부터). 색상이 1개 이하면 빈 목록 */
@@ -98,7 +97,7 @@ public class ViewFactory {
         Map<String, long[]> by = new LinkedHashMap<>();   // 이름 → [최저가, 판매처 수]
         for (PricedOffer o : offers) {
             if (!o.comparable()) continue;
-            String c = colorOf(o.data());
+            String c = o.data().color();
             if (c == null) continue;
             long[] v = by.computeIfAbsent(c, k -> new long[] { Long.MAX_VALUE, 0 });
             v[0] = Math.min(v[0], o.total());
@@ -110,16 +109,18 @@ public class ViewFactory {
                 .sorted(java.util.Comparator.comparingLong(Views.ColorView::bestTotal)).toList();
     }
 
-    /** 상품 링크의 도메인 (www. 제외). 쇼핑몰 자체 도메인이면 null → 판매처 이름만 표시 */
-    static String seller(String url) {
+    /**
+     * 상품 링크의 도메인 (www. 제외). 쇼핑몰 자체 도메인(application.yml globalprice.display.platform-domains)이면
+     * null → 판매처 이름만 표시
+     */
+    String seller(String url) {
         if (url == null) return null;
         try {
             String host = java.net.URI.create(url.strip()).getHost();
             if (host == null) return null;
             host = host.toLowerCase(Locale.ROOT);
             if (host.startsWith("www.")) host = host.substring(4);
-            for (String own : new String[] { "ebay.", "aliexpress.", "etsy.com", "amazon.", "rakuten.", "shopify.com",
-                    "shop.app" }) {
+            for (String own : platformDomains) {
                 if (host.contains(own)) return null;
             }
             return host;
