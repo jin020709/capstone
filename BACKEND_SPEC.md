@@ -218,13 +218,22 @@ interface MallSource {
 | 1 | Pixel | `pixel\|세대\|접미사\|용량` | `Google Pixel ...` |
 | 1 | MacBook | `macbook\|라인\|크기\|칩\|RAM\|SSD` | `Apple MacBook ...` |
 | 1 | iPad | `ipad\|라인\|크기\|칩·세대\|용량\|wifi·cell` | `Apple iPad ...` |
-| 2 | 상품명에 모델코드가 하나뿐 (위 5개 품목 제외, 갤럭시 SM- 코드는 허용) | `code:{코드}` | 리스팅 원래 이름 |
+| 1 | 그 밖의 휴대폰 · 태블릿 (모델 목록에 있음) | `dev\|제조사\|모델 이름\|용량` | `POCO X6 Pro 5G 512GB` |
+| 2 | 상품명에 모델코드가 하나뿐 (위 5개 품목 · 모델 목록에 있는 폰 제외, 갤럭시 SM- 코드는 허용) | `code:{코드}` | 리스팅 원래 이름 |
 | 3 | 그 밖 | `t:{소문자 · 공백 정리한 상품명}` (6자 이상) | 리스팅 원래 이름 |
 
 - 색상 · 통신사 · 언락 · 배송 문구는 무시한다 (판매처 줄에서 원래 상품명 `title`로 보여 줌).
 - 묶지 않는 경우: 한 상품명에 용량이나 모델이 여러 개, 용량 없음, 세트 · 묶음(`bundle`, `combo`, `set of`, `with case`, `세트`, `사은품` 등) → 다음 순서로 넘어감.
 - **모델코드** (`ModelCode`): 영문 + 숫자 5~20자, 숫자 3개 이상 (또는 6자 이상 · 숫자 2개 · 영문 3개). `256GB` · `240Hz` 같은 단위와 `iPhone17` 같은 제품 이름은 제외. 비교 시 대소문자 · 하이픈 · 공백 무시 (`SM-S938B` = `sms938b`).
 - **갤럭시 모델번호** (`ModelCodes`, DB `model_codes` · 09 마이그레이션): 번호 → 모델 (`s938` → S25 Ultra, `f946` → Z Fold5). 모델 하나에 번호 여러 개 가능 (A15 ← `a155` · `a156`). 지역 글자는 무시 (`SM-S938B` = `SM-S938N` = `SM-S938U1`). `SM-` 없이 쓴 번호(`(S938B)`)는 상품명에 samsung · galaxy 가 있을 때만 알아본다. 상품명 속 모델명과 번호가 다른 모델이거나 번호 두 개가 서로 다른 모델이면 갤럭시 규칙으로 묶지 않는다. 서버 시작 직후와 10분마다 다시 읽고, 테이블이 없거나 비면 내장 목록(S24 · S25 · Fold/Flip 6 · 7, 11개)을 쓴다. 번호를 더할 때는 DB 에 행만 넣으면 된다.
+- **휴대폰 · 태블릿 모델 목록** (`DeviceCatalog`, DB `device_models` · `model_codes`, 10 마이그레이션): Google Play 지원 기기 목록(공개 CSV, 안드로이드 기기 약 5.5만 행)을 `DeviceCatalogImport`가 받아 채운다 (서버 시작 15초 뒤 · 6시간마다 확인, 마지막으로 받은 지 7일 지나면 다시 받음. 실패하면 기존 목록 유지). 11/27 기준 모델 약 2.7만 개 · 모델번호 약 1.2만 개 · 갤럭시 번호 앞 4자리 372개.
+  - 상품명에서 가장 긴 모델 이름을 찾는다 (`POCO X6 Pro`가 `POCO X6`보다 먼저). 제조사 이름(별칭: Xiaomi ↔ Redmi · POCO, Motorola ↔ moto, LGE → LG)이 상품명에 있어야 한다. 5G · 4G · LTE 표기와 `+`/`plus` 차이는 무시.
+  - 모델번호(영숫자 5자 이상, 하이픈 무시: `CPH2649`, `2311DRK48G`, `XT2415-1`)로도 찾는다. 한 번호가 여러 모델이면 쓰지 않는다.
+  - 묶지 않음: 모델 이름이 둘 이상(호환 목록), 이름과 번호가 다른 모델, 용량이 없거나 둘 이상(`256/512GB` 포함), 세트 상품.
+  - 삼성 행은 갤럭시 규칙으로 읽히면 `SM-` 번호 앞 4자리를 갤럭시 번호로 넣고(M · Tab 등 시드에 없던 시리즈 포함), 구글 Pixel 은 픽셀 규칙을 쓰므로 넣지 않는다.
+  - 사람이 넣은 `MANUAL` 행이 자동(`GPLAY`) 행보다 우선. 자동 갱신은 GPLAY 행만 지우고 다시 넣는다. 끄려면 `globalprice.device-catalog.enabled=false`.
+  - 같은 시리즈 비교(4-6 3단계)는 이 기기들에는 같은 모델끼리만 (제조사 전체와 비교하지 않음).
+- **용량 목록 표기**: `256/512GB`처럼 단위를 마지막에만 쓴 목록도 용량 여러 개로 본다 (모든 품목 공통, 묶지 않음). `12/256GB`의 12 는 RAM 이라 용량에서 빠진다.
 - **다른 구성**: 키에서 용량을 뺀 부분(family, 예 `iphone|17 pro`)이 같은 상품들. 상세 `configs`로 내려준다.
 
 ### 4-6. 이상 가격 (`OutlierService`)
@@ -612,6 +621,7 @@ gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 
 | 7 | `07_migration_004.sql` | **필수** — `products.match_key`(UNIQUE) · `mall_products.listing_title`. 없으면 검색 · 상세가 실패 |
 | 8 | `08_migration_005.sql` | **필수** — `search_aliases.alias_source`(MANUAL · AUTO) + 한영 별칭 약 180개 (휴대폰 · 액세서리 · 생활가전 · 브랜드 · 색상). 없으면 한글 검색어가 번역되지 않음 |
 | 9 | `09_migration_006.sql` | `model_codes` 테이블 + 갤럭시 모델번호 39개 (S22~S25 · Z Fold/Flip 3~7 · A 시리즈). 없으면 내장 11개만 써서 Fold5 · A 시리즈 등 번호만 쓴 상품명이 안 묶임 |
+| 10 | `10_migration_007.sql` | `device_models` 테이블 + `model_codes.source` · `brand`. 행은 서버가 Google Play 기기 목록에서 채움. 없으면 아이폰 · 갤럭시 · 픽셀 · 맥북 · 아이패드 밖의 폰이 안 묶임 |
 | (선택) | `90_demo_price_history.sql` | 시연용 가짜 가격 이력 1년치. 운영 DB 금지. 지우기: `DELETE FROM price_history WHERE TIME(recorded_at) = '04:44:44'` |
 
 ---
@@ -667,3 +677,4 @@ gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 
 | 2026-11-26 | 검색어 별칭을 `aliases.csv` 대신 DB `search_aliases`에서 읽음 (10분마다 갱신), `aliases.csv` 삭제. 08 마이그레이션: `alias_source` 컬럼 + 별칭 약 180개. 한글 "핸드폰 케이스" · "아이폰 17 케이스" 검색에 케이스가 안 나오던 문제 해결 |
 | 2026-11-26 | 구조 정리: 상세 500(match_key NULL NPE) 수정, 출발국 · 색상 · 묶기 키를 OfferData 에서 한 번만 계산, SearchService 를 SearchRanker · FacetBuilder 로 분리, 묶기 판단을 ProductGrouping 으로, 이상 가격을 OutlierService 하나로 (찜 목록 · 알림 판정도 같은 규칙), 하드코딩 목록을 application.yml 로, 프론트 static 복사본을 Gradle 자동 복사로, 상세 `colors` 추가(프론트 색상 판단 코드 삭제) |
 | 2026-11-27 | 갤럭시 모델번호를 코드 대신 DB `model_codes`(09 마이그레이션, 39개)에서 읽음 (10분마다 갱신). 모델 하나에 번호 여러 개, `SM-` 없는 번호도 인식. Fold5 · A 시리즈 등 내장 목록에 없던 모델도 같은 상품으로 묶임 |
+| 2026-11-27 | 휴대폰 · 태블릿 모델 목록: Google Play 지원 기기 CSV 를 받아 DB `device_models` · `model_codes`(10 마이그레이션)에 넣고, 상품명 속 모델 이름 · 모델번호로 샤오미 · 원플러스 · 모토로라 등도 같은 상품으로 묶음 (`dev|` 키). 갤럭시 번호도 이 목록에서 채움. `256/512GB` 같은 용량 목록을 용량 여러 개로 읽도록 수정 |

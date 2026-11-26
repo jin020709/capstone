@@ -106,6 +106,7 @@ public abstract class IntegrationTestBase {
         r.add("globalprice.sources.ebay.token-url", () -> base + "/identity/v1/oauth2/token");
         r.add("globalprice.sources.koreaexim.auth-key", () -> "");
         r.add("globalprice.sources.koreaexim.url", () -> base + "/exchangeJSON");
+        r.add("globalprice.device-catalog.enabled", () -> "false");   // 테스트 중 Google 기기 목록을 받지 않음
     }
 
     private static synchronized MySQLContainer container() {
@@ -134,7 +135,9 @@ public abstract class IntegrationTestBase {
                     .withCopyFileToContainer(MountableFile.forHostPath(db.resolve("08_migration_005.sql")),
                             "/docker-entrypoint-initdb.d/08.sql")
                     .withCopyFileToContainer(MountableFile.forHostPath(db.resolve("09_migration_006.sql")),
-                            "/docker-entrypoint-initdb.d/09.sql");
+                            "/docker-entrypoint-initdb.d/09.sql")
+                    .withCopyFileToContainer(MountableFile.forHostPath(db.resolve("10_migration_007.sql")),
+                            "/docker-entrypoint-initdb.d/10.sql");
             mysql.start();
         }
         return mysql;

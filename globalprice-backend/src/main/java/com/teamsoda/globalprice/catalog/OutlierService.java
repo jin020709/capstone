@@ -143,6 +143,7 @@ public class OutlierService {
 
     /** 모델 키에서 세대를 뺀 시리즈 (galaxy|z fold|5| → galaxy|z fold). 세대 칸이 없는 키는 첫 칸 */
     static String series(String family) {
+        if (family.startsWith("dev|")) return family;   // 모델 목록 기기는 세대 구분을 모름 → 같은 모델끼리만
         String[] p = family.split("\\|");
         return p.length >= 3 ? p[0] + "|" + p[1] : p[0];
     }

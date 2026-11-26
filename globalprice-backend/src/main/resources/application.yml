@@ -102,6 +102,11 @@ globalprice:
       daily-budget: 3000
     koreaexim:
       auth-key: ${KOREAEXIM_KEY:}
+  # 휴대폰 · 태블릿 모델 목록 (같은 상품 묶기, BACKEND_SPEC 4-5). Google Play 지원 기기 공개 CSV 를 받아 DB 에 넣음
+  device-catalog:
+    enabled: ${DEVICE_CATALOG_ENABLED:true}
+    url: https://storage.googleapis.com/play_public/supported_devices.csv
+    refresh-after: 7d
 
 logging:
   level:

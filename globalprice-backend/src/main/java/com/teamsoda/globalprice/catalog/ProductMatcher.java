@@ -40,6 +40,7 @@ public final class ProductMatcher {
             if (m == null) m = pixel(t);
             if (m == null) m = macbook(t);
             if (m == null) m = ipad(t);
+            if (m == null) m = device(t);
         }
         if (m != null) return m;
         // 이름 규칙이 없는 상품(모니터 등)은 상품명 속 모델코드가 하나뿐이면 그 코드로 묶는다.
@@ -47,6 +48,8 @@ public final class ProductMatcher {
         // (A3520 같은 모델번호는 용량 구분이 없어서 256GB · 512GB 가 섞임). 단, 갤럭시 SM- 코드는 그대로 씀
         String code = ModelCode.single(title);
         boolean family = FAMILY.matcher(t).find() && !t.matches(".*(?<![a-z0-9])sm-?[a-z]\\d{3}.*");
+        // 모델 목록에 있는 폰인데 용량이 애매해 빠진 경우도 같음 (칩 이름 "Dimensity7300" 이 모델코드로 잡혀 다른 폰과 섞임)
+        if (!family && devices.find(t) != null) family = true;
         if (code != null && !family && !BUNDLE.matcher(t).find()) return new Match("code:" + code, cut(title.strip()));
         String flat = t.replaceAll("[^a-z0-9가-힣+.]+", " ").trim();
         if (flat.length() < 6) return null;
@@ -93,6 +96,11 @@ public final class ProductMatcher {
                     Integer ram = p[4].equals("?") ? null : Integer.parseInt(p[4]);
                     return new Config(String.join("|", p[0], p[1], p[2], p[3]),
                             (ram == null ? "" : gb(ram) + " · ") + gb(ssd), ssd, (ram == null ? 0L : ram) * 100_000L + ssd);
+                }
+                case "dev": {   // dev|제조사|모델 이름|용량 (DeviceCatalog)
+                    if (p.length != 4) return null;
+                    int s = Integer.parseInt(p[3]);
+                    return new Config(String.join("|", p[0], p[1], p[2]), gb(s), s, s);
                 }
                 case "ipad": {   // ipad|라인|크기|칩·세대|용량|wifi·cell
                     if (p.length != 6) return null;
@@ -156,11 +164,22 @@ public final class ProductMatcher {
                 .replaceAll("\\s+", " ").trim();
     }
 
-    private static final Pattern CAPACITY = Pattern.compile("(?<![a-z0-9.])(\\d{1,4})\\s?(gb|tb|go|g)(?![a-z])");
+    private static final Pattern SLASH_LIST = Pattern.compile(
+            "(?<![a-z0-9.])((?:\\d{1,4}\\s?/\\s?)+)\\d{1,4}\\s?(gb|tb)(?![a-z])");
+    private static final Pattern CAPACITY =Pattern.compile("(?<![a-z0-9.])(\\d{1,4})\\s?(gb|tb|go|g)(?![a-z])");
 
     /** 상품명에 나온 용량들 (GB 단위, 중복 제거, 오름차순) */
     static TreeSet<Integer> capacities(String t) {
         TreeSet<Integer> out = new TreeSet<>();
+        // "256/512GB" · "128/256/512GB" 처럼 단위를 마지막에만 쓴 목록: 앞 숫자들도 용량 (8/256GB 의 8 은 RAM 이라 아래 64GB 기준에서 빠짐)
+        Matcher list = SLASH_LIST.matcher(t);
+        while (list.find()) {
+            String unit = list.group(2);
+            for (String n : list.group(1).split("\\s?/\\s?")) {
+                int v = Integer.parseInt(n);
+                out.add(unit.equals("tb") && v < 16 ? v * 1024 : v);   // 512/1TB 의 512 는 GB
+            }
+        }
         Matcher m = CAPACITY.matcher(t);
         while (m.find()) {
             int v = Integer.parseInt(m.group(1));
@@ -265,7 +284,7 @@ public final class ProductMatcher {
             Map.entry("f741", new String[] { "z flip", "6", "" }));
     private static volatile Map<String, String[]> galaxyCodes = BUILT_IN_CODES;
     /** SM-S938B · SM-F946U1 처럼 SM- 가 붙은 번호 (지역 글자는 무시) */
-    private static final Pattern SM_CODE = Pattern.compile("(?<![a-z0-9])sm-?([sfa]\\d{3})");
+    private static final Pattern SM_CODE = Pattern.compile("(?<![a-z0-9])sm-?([a-z]\\d{3})");
     /** SM- 없이 쓴 번호 ("Galaxy S25 Ultra (S938B)"). 다른 숫자와 헷갈리므로 상품명에 samsung · galaxy 가 있을 때만 */
     private static final Pattern BARE_CODE = Pattern.compile("(?<![a-z0-9-])([sfa]\\d{3})[a-z]{0,2}\\d?(?![a-z0-9])");
     private static final Pattern SAMSUNG = Pattern.compile("(?<![a-z])(samsung|galaxy)(?![a-z])");
@@ -340,6 +359,24 @@ public final class ProductMatcher {
         };
         return new Match("galaxy|" + series + "|" + num + "|" + suffix + "|" + storage,
                 "Samsung Galaxy " + seriesName + suffixName + " " + gb(storage));
+    }
+
+    // ---------------- 그 밖의 휴대폰 · 태블릿 (모델 목록) ----------------
+
+    private static volatile DeviceCatalog devices = DeviceCatalog.EMPTY;
+
+    /** DB 에서 읽은 모델 목록으로 바꾼다 ({@link ModelCodes}). null 이면 빈 목록 */
+    public static void useDeviceCatalog(DeviceCatalog catalog) {
+        devices = catalog == null ? DeviceCatalog.EMPTY : catalog;
+    }
+
+    /** 모델 목록에 있는 기기 + 저장 용량 1개 → dev|제조사|이름|용량 */
+    static Match device(String t) {
+        DeviceCatalog.Model m = devices.find(t);
+        if (m == null) return null;
+        Integer storage = singleStorage(t);
+        if (storage == null) return null;
+        return new Match(cut(m.key() + "|" + storage), cut(m.displayName() + " " + gb(storage)));
     }
 
     // ---------------- Pixel ----------------

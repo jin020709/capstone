@@ -46,6 +46,7 @@ public final class FacetBuilder {
                 case "iphone", "ipad", "macbook" -> "Apple";
                 case "galaxy" -> "Samsung";
                 case "pixel" -> "Google";
+                case "dev" -> g.productName() == null ? null : g.productName().split(" ")[0];   // 대표 이름 첫 단어
                 default -> null;
             };
             return new FacetInfo(brand, c.family(), TAIL.matcher(g.productName()).replaceFirst("").strip(),

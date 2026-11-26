@@ -70,6 +70,9 @@ class ProductMatcherTest {
         noModelKey("Apple iPhone 17 Pro / 17 Pro Max 256GB");
         noModelKey("Apple iPhone 17");
         noModelKey("Apple iPhone 17 Pro 256GB Bundle with AirPods");
+        noModelKey("Apple iPhone 17 Pro 256/512GB Sealed");   // 용량 목록 (단위를 마지막에만)
+        noModelKey("Apple iPhone 17 Pro 128/256/1TB");
+        assertThat(key("Apple iPhone 17 Pro 12/256GB")).isEqualTo("iphone|17 pro|256");   // 12 는 RAM
         // 이름(S25)과 모델번호(S25 Ultra)가 다르면 이름 규칙은 포기하고 모델코드로 묶음
         assertThat(key("Samsung Galaxy S25 256GB SM-S938B")).isEqualTo("code:sms938b");
     }
