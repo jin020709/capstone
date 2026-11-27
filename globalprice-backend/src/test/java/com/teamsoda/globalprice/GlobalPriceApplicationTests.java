@@ -61,6 +61,20 @@ class GlobalPriceApplicationTests extends IntegrationTestBase {
         org.assertj.core.api.Assertions.assertThat(modelRows).isPositive();   // 03 시드 상품의 모델번호 별칭이 있어도 영향 없음
     }
 
+    /** 자동 번역 결과는 AUTO 행으로 저장되고, 같은 말의 MANUAL 행을 덮지 않는다 */
+    @Test
+    void autoTranslatedAlias_savedWithoutOverridingManual(
+            @org.springframework.beans.factory.annotation.Autowired com.teamsoda.globalprice.search.AliasRepository aliases) {
+        String word = "자동번역" + unique("t").replaceAll("[^0-9]", "");
+        aliases.insertAuto(word, "auto test");
+        aliases.insertAuto(word, "second try");   // 같은 말은 한 번만
+        aliases.insertAuto("케이스", "bogus");     // 08 의 MANUAL 행
+        var map = aliases.translations();
+        org.assertj.core.api.Assertions.assertThat(map).containsEntry(word, "auto test").containsEntry("케이스", "case");
+        org.assertj.core.api.Assertions.assertThat(jdbc.queryForObject(
+                "SELECT alias_source FROM search_aliases WHERE alias_text = ?", String.class, word)).isEqualTo("AUTO");
+    }
+
     /** 갤럭시 모델번호는 DB model_codes 에서 읽는다 (09 마이그레이션). 내장 목록에 없는 Fold5 도 묶인다 */
     @Test
     void galaxyModelCodes_fromDatabase(@org.springframework.beans.factory.annotation.Autowired com.teamsoda.globalprice.catalog.ModelCodes modelCodes) {

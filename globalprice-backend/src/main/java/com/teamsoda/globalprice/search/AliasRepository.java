@@ -35,4 +35,13 @@ public class AliasRepository {
         });
         return out;
     }
+
+    /**
+     * 자동 번역 결과를 AUTO 행으로 저장. 같은 alias_text 의 변환 행(브랜드 · 모델번호 없음)이 이미 있으면
+     * UNIQUE(uq_search_alias_target) 때문에 넣지 않는다 → 사람이 넣은 MANUAL 행을 덮지 않음
+     */
+    public void insertAuto(String alias, String searchTerm) {
+        jdbc.update("INSERT IGNORE INTO search_aliases (alias_text, search_term, alias_source) VALUES (?, ?, 'AUTO')",
+                alias.strip().toLowerCase(Locale.ROOT), searchTerm.strip());
+    }
 }

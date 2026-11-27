@@ -20,6 +20,7 @@ TEAM SODA · 해외직구 가격비교 서비스
 | Etsy (Open API v3) | 켜짐 · 실제 호출 확인 | 키 필요. 수공예 · 빈티지 위주라 전자기기 비교에 약함 |
 | AliExpress (Affiliate) | 켜짐 · 실제 호출 확인 | 키 필요. tracking_id 없으면 제휴 링크 대신 상품 페이지 |
 | 한국수출입은행 환율 | 실제 호출 확인 | `KOREAEXIM_KEY` 필요. 서버 시작 시 최근 영업일 값 자동 수집 |
+| DeepL API (번역) | 실제 호출 확인 (11/27) | `DEEPL_API_KEY` 필요 (무료 키 월 글자 한도(받은 키는 100만 자), 넘으면 과금 없이 멈춤). 사전에 없는 한글 검색어 단어만 번역해 AUTO 별칭으로 저장 (6-2) |
 | Google Play 지원 기기 목록 (공개 CSV) | 실제 내려받기 확인 | 키 없음. 휴대폰 · 태블릿 모델 목록(같은 상품 묶기, 4-5). DB 에 넣어 두고 7일마다 갱신, 검색 중에는 호출 안 함 |
 
 키가 없거나 `*_ENABLED=false`인 소스는 `skipped`로 표시되고, 앱 기동에는 영향이 없습니다.
@@ -51,6 +52,7 @@ TEAM SODA · 해외직구 가격비교 서비스
 ```
 GET /api/products?q=아이폰 17
  1. 검색어 검증(1~50자) · 공백 정리 · 한영 별칭 변환 (아이폰17 → iphone 17)
+      └ 사전에 없는 한글 단어만 DeepL 번역 (최대 1.5초, 결과는 AUTO 별칭으로 저장)
  2. 활성 소스 동시 호출 (가상 스레드, 소스당 연결 2초 + 읽기 3초 + 1초)
       └ 소스별 캐시 (검색어 기준 10분, 최대 500건) → 있으면 외부 호출 없음
       └ 하루 호출 예산 · 429 이후 10분 쉬기 확인
@@ -87,7 +89,7 @@ GET /api/products?q=아이폰 17
 | rate | 수출입은행 클라이언트 · 환율 서비스 |
 | pricing | `PriceCalculator` (순수 함수) · 규칙 조회 |
 | catalog | 상품 저장 흐름(`CatalogService`) · SQL(`CatalogRepository`) · 묶기 판단(`ProductGrouping` · `ProductMatcher` · `ModelCode`) · 모델 목록(`ModelCodes` · `DeviceCatalog` · `DeviceCatalogImport`) · 이상 가격(`OutlierService` · `PriceOutliers`) · 출발국(`Origin`) · 색상(`ColorName`) · 계산(`OfferPricer`) · 상세 · 가격 이력 · 응답 모양(Views) |
-| search | 검색 흐름(`SearchService`) · 관련도 정렬(`SearchRanker`) · 체크표(`FacetBuilder`) · 별칭(`QueryNormalizer` · `AliasRepository`) · 걸러내기(`ResultFilter`) · `SameProductGrouper` · 소스 호출(SourceCaller) |
+| search | 검색 흐름(`SearchService`) · 관련도 정렬(`SearchRanker`) · 체크표(`FacetBuilder`) · 별칭(`QueryNormalizer` · `AliasRepository`) · 자동 번역(`QueryTranslator` · `DeeplTranslator`) · 걸러내기(`ResultFilter`) · `SameProductGrouper` · 소스 호출(SourceCaller) |
 | wishlist / alert | 관심 상품, 알림 조건 · 판정 · 받은 알림 (JPA) |
 | scheduler / web | 스케줄 작업, `@RestController` |
 
@@ -102,7 +104,7 @@ GET /api/products?q=아이폰 17
 | 테스트 | JUnit 5, JDK 내장 HttpServer 가짜 서버, Testcontainers MySQL 8 |
 | JDK | Gradle foojay resolver 로 JDK 25 자동 다운로드 |
 
-계층: Controller → Service → Repository. 외부 HTTP는 `source` · `rate`와 기기 목록 내려받기(`catalog.DeviceCatalogImport`, 7일마다)만 호출한다. `PriceCalculator`는 DB · 시간 · 네트워크에 의존하지 않는다.
+계층: Controller → Service → Repository. 외부 HTTP는 `source` · `rate`, 기기 목록 내려받기(`catalog.DeviceCatalogImport`, 7일마다), 검색어 번역(`search.DeeplTranslator`, 사전에 없는 단어만)만 호출한다. `PriceCalculator`는 DB · 시간 · 네트워크에 의존하지 않는다.
 offer 의 출발국 · 색상 · 묶기 키는 `OfferData`를 만들 때 한 번만 정하고 계산 · 화면 · 필터가 그 값을 쓴다 (곳곳에서 따로 계산하지 않음).
 
 ---
@@ -370,9 +372,15 @@ DB 규칙 · 환율 · offer만 입력으로 받는 순수 함수. 모든 금액
 `discount_desc`는 할인율 높은 순이고 관련도 정렬은 쓰지 않는다.
 
 **검색어 처리**
-- 공백 정리 → DB `search_aliases`(05 · 08 마이그레이션)로 한글 단어를 영어로 (사전 단어 뒤에 숫자 · 영문이 붙으면 나눔: 갤럭시s25 → galaxy s25). 사전에 없는 한글은 그대로.
-  - 쓰는 행: `is_active` 이고 `model_number`가 NULL 인 행, 단어 하나짜리 별칭만. 같은 말이 여러 행이면 `alias_source` MANUAL(사람이 넣은 값) > AUTO(자동 번역, 아직 없음), 그다음 먼저 넣은 행.
+- 공백 정리 → DB `search_aliases`(05 · 08 마이그레이션)로 한글 단어를 영어로 (사전 단어 뒤에 숫자 · 영문이 붙으면 나눔: 갤럭시s25 → galaxy s25).
+  - 쓰는 행: `is_active` 이고 `model_number`가 NULL 인 행, 단어 하나짜리 별칭만. 같은 말이 여러 행이면 `alias_source` MANUAL(사람이 넣은 값) > AUTO(자동 번역), 그다음 먼저 넣은 행.
   - 서버가 10분마다 다시 읽는다 (DB 에서 고치면 재시작 없이 반영). 읽기에 실패하면 마지막으로 읽은 사전을 계속 쓴다.
+- 사전으로 바꾼 뒤에도 한글이 남은 단어는 DeepL 로 번역한다 (`QueryNormalizer.autoTranslate`, ko → en-US).
+  - 남은 단어를 한 번의 요청으로 보내고 `globalprice.translate.timeout`(1.5초)까지만 기다린다. DeepL 은 새 연결이면 약 1초(TLS 0.6초), 연결이 살아 있으면 약 0.4초. 늦으면 그 단어는 한글 그대로 검색하고, 번역은 뒤에서 끝나면 저장한다.
+  - 결과는 메모리 사전에 바로 넣고 `search_aliases`에 `alias_source='AUTO'`로 INSERT IGNORE (같은 말의 변환 행이 이미 있으면 UNIQUE 때문에 안 들어감 → MANUAL 을 덮지 않음). 다음 검색부터는 DeepL 을 부르지 않는다.
+  - 저장 안 함: 빈 값 · 한글이 남은 값 · 원문과 같은 값 · 255자 초과. 앞뒤 따옴표 · 마침표는 지우고 소문자로. 실패하거나 못 바꾼 단어는 1시간 동안 다시 묻지 않는다.
+  - 키가 없거나 꺼져 있으면(`DEEPL_ENABLED=false`) 지금처럼 사전에 없는 한글은 그대로 보낸다. 오류 · 무료 한도 초과(456) · 하루 호출 예산(1,000회) 초과도 그대로 보낸다.
+  - 틀린 번역은 그 AUTO 행의 `search_term`을 고치거나 `alias_source`를 MANUAL 로 바꾼다 (10분 안에 반영).
   - 액세서리 단어도 사전에 있어야 한다 (케이스 → case, 필름 → screen protector). 걸러내기는 번역된 검색어로 판단해서, 번역이 안 되면 "케이스" 검색에서 영어 상품명의 case 가 걸러진다.
 - **걸러내기** (`ResultFilter`, 키워드는 `application.yml`의 `globalprice.filter`). 검색어에 같은 키워드가 있으면(예: "iphone case") 거르지 않는다. 영문 키워드는 단어 경계 + 복수형(cases, covers)까지.
   - 새 상품 아님: used · pre-owned · refurbished · renewed · for parts · as-is · open box · 중고 · 리퍼 등
@@ -566,6 +574,8 @@ DB `chk_alert_target`과 같은 조합. 어기면 400.
 | `KOREAEXIM_KEY` | 수출입은행 인증키 | 환율 수집 안 함 |
 | `EBAY_ENABLED` · `SHOPIFY_ENABLED` · `ALI_ENABLED` · `ETSY_ENABLED` | 쇼핑몰 끄기 (`false`) | 모두 켜짐 |
 | `DEVICE_CATALOG_ENABLED` | Google Play 기기 목록 자동 내려받기 끄기 (`false`). 끄면 DB 에 있는 행만 씀 | 켜짐 |
+| `DEEPL_API_KEY` | DeepL 인증키 (무료 키는 끝이 `:fx` → api-free 주소) | 자동 번역 안 함 (사전만) |
+| `DEEPL_ENABLED` | 자동 번역 끄기 (`false`) | 켜짐 (키가 있을 때) |
 
 키 · DB 비밀번호는 OS 사용자 환경 변수로 한 번 등록한다 (Windows: PowerShell `[Environment]::SetEnvironmentVariable("이름", "값", "User")`, Mac: `~/.zshrc`에 `export`). 등록 후 열려 있던 터미널 · IDE는 다시 켠다.
 
@@ -574,6 +584,7 @@ DB `chk_alert_target`과 같은 조합. 어기면 400.
 - `globalprice.outliers.installment-keywords`: 할부 · 계약금 표기 (정규식)
 - `globalprice.display.platform-domains`: 쇼핑몰 자체 도메인 (상품 링크가 여기 속하면 판매자 도메인 `seller`를 null 로)
 - `globalprice.device-catalog`: 기기 목록 `url`(Google Play 공개 CSV) · `refresh-after`(7일) · `enabled`
+- `globalprice.translate`: 번역 대기 `timeout`(1.5초), `deepl.url`(비우면 키로 고름) · `deepl.daily-budget`(하루 1,000회)
 
 ---
 
@@ -605,10 +616,11 @@ gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 
 | 환율 서비스 | 주말이면 직전 영업일, 이미 최신이면 호출 없음, 키 없음 · 인증 오류면 중단 |
 | 묶기 · 출발국 · 이상 가격 · 색상 · 모델코드 | `ProductMatcherTest` · `OriginTest` · `PriceOutliersTest` · `OutlierServiceTest` · `ColorNameTest` · `ModelCodeTest` · `SameProductGrouperTest` · `ProductGroupingTest` |
 | 모델 목록 | `GalaxyModelCodeTest` (09 시드 행마다 번호 키 = 모델명 키) · `DeviceCatalogTest` (실제 CSV 행으로 읽기 · 가장 긴 이름 · 모델번호 · 5G/4G 판 · 애매하면 안 묶음). 통합 테스트는 기기 목록을 내려받지 않음 (`device-catalog.enabled=false`) |
+| 검색어 번역 | `QueryTranslateTest`: 사전 단어는 안 보냄 · 모르는 단어는 한 번에 보내고 저장 · 두 번째는 호출 0회 · 늦으면 원래 단어 후 뒤에서 저장 · 이상한 번역 저장 안 함 · 1시간 재시도 금지 · 오류 · 꺼짐이면 지금과 같음 · DeepL 응답 읽기 · 무료 키 주소. 통합: AUTO 저장이 MANUAL 을 덮지 않음. 통합 테스트는 DeepL 을 부르지 않음 (`translate.deepl.enabled=false`) |
 | 검색 서비스 | 가짜 소스 3개: 일부 실패 200, 전부 실패 503 · 502, 캐시 히트 시 외부 호출 0회, 걸러내기 · 정렬 · 필터 · 페이지 · 예산 · 쿨다운, 관련도(`RelevanceTest`), 체크표(`FacetTest`) |
 | 통합 (실제 MySQL) | API 전체 흐름, 시드 금액, 저장 멱등 · 이력 중복 방지, stale 표시, 관심 상품 갱신 → 알림 · 하루 1회, 행사 알림 |
 
-현재 158개 (통합 테스트는 DB 없으면 건너뜀). 묶기 판단은 메모리 Store 로(`ProductGroupingTest`), 키워드 목록은 실제 `application.yml`을 읽어서(`support/RealConfig`) 확인한다. **실패 1개**: `SearchServiceTest.partialFailure_returns200WithSourceStatuses` — 관련도 정렬 도입 후 순서 기대값을 고치지 않음 (13장 기본 정렬 결정 후 정리).
+현재 168개 (통합 테스트는 DB 없으면 건너뜀). 묶기 판단은 메모리 Store 로(`ProductGroupingTest`), 키워드 목록은 실제 `application.yml`을 읽어서(`support/RealConfig`) 확인한다. **실패 1개**: `SearchServiceTest.partialFailure_returns200WithSourceStatuses` — 관련도 정렬 도입 후 순서 기대값을 고치지 않음 (13장 기본 정렬 결정 후 정리).
 
 ---
 
@@ -686,4 +698,5 @@ gradlew.bat test --rerun         # 환경 변수만 바꿔 다시 돌릴 때는 
 | 2026-11-27 | 갤럭시 모델번호를 코드 대신 DB `model_codes`(09 마이그레이션, 39개)에서 읽음 (10분마다 갱신). 모델 하나에 번호 여러 개, `SM-` 없는 번호도 인식. Fold5 · A 시리즈 등 내장 목록에 없던 모델도 같은 상품으로 묶임 |
 | 2026-11-27 | 휴대폰 · 태블릿 모델 목록: Google Play 지원 기기 CSV 를 받아 DB `device_models` · `model_codes`(10 마이그레이션)에 넣고, 상품명 속 모델 이름 · 모델번호로 샤오미 · 원플러스 · 모토로라 등도 같은 상품으로 묶음 (`dev|` 키). 갤럭시 번호도 이 목록에서 채움. `256/512GB` 같은 용량 목록을 용량 여러 개로 읽도록 수정 |
 | 2026-11-27 | 모델코드에서 `inches` · `oz` · `lb` 단위와 칩 이름(Dimensity · Snapdragon · Helio 등) 제외. `13-inches` · `16.2oz` · `Dimensity7300` 이 모델코드로 잡혀 다른 상품끼리 묶이던 문제 |
+| 2026-11-27 | 검색어 자동 번역: 사전에 없는 한글 단어만 DeepL 로 번역 (1.5초 대기, 늦으면 원래 단어), 결과를 `search_aliases` AUTO 행으로 저장해 다음부터 재사용. `DEEPL_API_KEY` · `DEEPL_ENABLED` · `globalprice.translate` 설정. 마이그레이션 없음 (08 의 `alias_source` 사용) |
 | 2026-11-27 | 문서 동기화: 기기 목록(외부 데이터 · 스케줄 · 구조 · `DEVICE_CATALOG_ENABLED` · `device-catalog` 설정), 테스트 158개 · 01~10 스크립트, 13장 2 · 10번, 12장 상태. ERD 에 마이그레이션 004~007 컬럼 · 테이블 · UNIQUE · CHECK(27개) 반영 |

@@ -107,6 +107,15 @@ globalprice:
     enabled: ${DEVICE_CATALOG_ENABLED:true}
     url: https://storage.googleapis.com/play_public/supported_devices.csv
     refresh-after: 7d
+  # 검색어 자동 번역 (BACKEND_SPEC 6-1). 사전(search_aliases)에 없는 한글 단어만 DeepL 로 바꿔 AUTO 행으로 저장
+  # 키가 없으면 꺼짐 (사전만 사용). 무료 키(끝이 :fx)는 월 글자 한도(받은 키는 100만 자)까지, 넘으면 과금 없이 멈춤
+  translate:
+    timeout: 1500ms       # 이 시간 안에 안 오면 원래 단어로 검색 (번역은 뒤에서 끝나면 저장)
+    deepl:
+      enabled: ${DEEPL_ENABLED:true}
+      api-key: ${DEEPL_API_KEY:}
+      url: ""             # 비우면 키로 고름 (:fx → api-free.deepl.com, 그 외 → api.deepl.com)
+      daily-budget: 1000  # 하루 호출 수
 
 logging:
   level:

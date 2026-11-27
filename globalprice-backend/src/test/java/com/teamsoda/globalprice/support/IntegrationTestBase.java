@@ -107,6 +107,7 @@ public abstract class IntegrationTestBase {
         r.add("globalprice.sources.koreaexim.auth-key", () -> "");
         r.add("globalprice.sources.koreaexim.url", () -> base + "/exchangeJSON");
         r.add("globalprice.device-catalog.enabled", () -> "false");   // 테스트 중 Google 기기 목록을 받지 않음
+        r.add("globalprice.translate.deepl.enabled", () -> "false");  // 테스트 중 DeepL 을 부르지 않음
     }
 
     private static synchronized MySQLContainer container() {
