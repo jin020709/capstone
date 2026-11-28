@@ -1,0 +1,13 @@
+# 이미지에 넣지 않을 것 (비밀값 · 빌드 결과 · IDE 파일)
+.git
+api_key.txt
+*.key
+.env
+.env.*
+**/build/
+**/.gradle/
+**/bin/
+**/.settings/
+**/.project
+**/.classpath
+**/.idea/
