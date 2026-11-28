@@ -185,15 +185,50 @@ GP.ui = (function () {
     document.documentElement.setAttribute('data-theme', id);
     GP.api.LS.set('gp_theme', id);
   }
-  setTheme(getTheme());
+  // 색 테마 선택칸은 없애고 기본(그린)으로 고정. 예전에 블루 · 라벤더를 골랐던 사람도 그린으로 맞춤
+  setTheme('green');
+
+  /* ---------- 기본 ↔ 다크 (헤더의 해 · 달 아이콘) ----------
+     처음엔 기기 설정(다크/라이트)을 따르고, 아이콘을 누르면 그 선택을 기억한다 */
+  function getColorMode() {
+    var saved = GP.api.LS.get('gp_mode', null);
+    if (saved === 'dark' || saved === 'light') return saved;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  function applyColorMode(m) { document.documentElement.setAttribute('data-mode', m); }
+  function setColorMode(m) {
+    GP.api.LS.set('gp_mode', m);
+    applyColorMode(m);
+    var b = document.getElementById('modeToggle');
+    if (b) paintColorModeBtn(b, m);
+  }
+  var ICON_MOON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+  var ICON_SUN = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>';
+  function paintColorModeBtn(b, m) {
+    var dark = m === 'dark';
+    b.setAttribute('aria-pressed', String(dark));
+    // 지금이 기본이면 달(누르면 다크), 다크면 해(누르면 기본)
+    b.innerHTML = dark ? ICON_SUN : ICON_MOON;
+    b.title = dark ? '기본 모드로 바꾸기' : '다크 모드로 바꾸기';
+    b.setAttribute('aria-label', b.title);
+  }
+  applyColorMode(getColorMode());
+  // 저장한 선택이 없으면 기기 설정이 바뀔 때 따라감
+  if (window.matchMedia) {
+    var mq = window.matchMedia('(prefers-color-scheme: dark)');
+    var follow = function () {
+      if (GP.api.LS.get('gp_mode', null)) return;
+      applyColorMode(mq.matches ? 'dark' : 'light');
+      var b = document.getElementById('modeToggle');
+      if (b) paintColorModeBtn(b, getColorMode());
+    };
+    if (mq.addEventListener) mq.addEventListener('change', follow); else if (mq.addListener) mq.addListener(follow);
+  }
 
   /* ---------- 헤더 · 푸터 ---------- */
   function renderHeader(active) {
     var user = GP.api.me();
     var q = param('q') || '';
-    var themeOpts = THEMES.map(function (t) {
-      return '<option value="' + t.id + '"' + (t.id === getTheme() ? ' selected' : '') + '>' + t.label + '</option>';
-    }).join('');
     var authLinks = user
       ? '<span>' + esc(user.nickname) + '님</span><a href="mypage.html">마이페이지</a><button type="button" id="logoutBtn">로그아웃</button>'
       : '<a href="login.html">로그인</a><a href="signup.html">회원가입</a>';
@@ -209,7 +244,7 @@ GP.ui = (function () {
       '<div class="topbar"><div class="container">' +
         '<div class="rates" id="ratesBar"><b style="color:var(--primary)">오늘의 환율</b><span class="muted">불러오는 중…</span></div>' +
         '<div class="links">' +
-          '<label class="theme-switch">테마 <select id="themeSelect" aria-label="디자인 테마">' + themeOpts + '</select></label>' +
+          '<button type="button" class="mode-toggle" id="modeToggle" aria-pressed="false"></button>' +
           authLinks +
         '</div>' +
       '</div></div>' +
@@ -234,7 +269,9 @@ GP.ui = (function () {
     if (!mount) return;
     mount.innerHTML = html;
 
-    $('#themeSelect').addEventListener('change', function (e) { setTheme(e.target.value); });
+    var mt = $('#modeToggle');
+    paintColorModeBtn(mt, getColorMode());
+    mt.addEventListener('click', function () { setColorMode(getColorMode() === 'dark' ? 'light' : 'dark'); });
     var lo = $('#logoutBtn');
     if (lo) lo.addEventListener('click', function () { GP.api.logout().then(function () { location.href = 'index.html'; }); });
     $('#headerQ').setAttribute('maxlength', '50'); // 백엔드: 검색어 1~50자

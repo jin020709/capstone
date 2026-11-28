@@ -81,7 +81,7 @@
     var c = o.calc, pt = P.parts(c);
     // 배송비: 쇼핑몰이 준 값 > 배송비 규칙(추정) > 모름. 모르면 합계에 빠져 있으니 "무료"로 보이면 안 됨
     var shipUnknown = c.shippingKnown === false;
-    var ship = shipUnknown ? '<span style="color:#8A5A00">확인 필요</span>' : (c.shippingFeeKrw ? P.won(c.shippingFeeKrw) : '무료');
+    var ship = shipUnknown ? '<span style="color:var(--warn-text)">확인 필요</span>' : (c.shippingFeeKrw ? P.won(c.shippingFeeKrw) : '무료');
     var e = useCoupon ? o.appliedEvent : null;
     var perk = c.discountAmountKrw && e ? '<span class="perk" title="' + U.esc(e.eventName) + '">−' + P.won(c.discountAmountKrw) + '</span>' : '<span class="muted">—</span>';
     var best = i === 0 && P.comparable(o) && product.offers.length > 1 ? ' <span class="badge" style="background:var(--accent);color:var(--on-accent)">최저</span>' : '';
@@ -447,7 +447,7 @@
         });
       }
     }
-    new MutationObserver(function () { drawChart(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    new MutationObserver(function () { drawChart(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-mode'] });
   }
 
   document.addEventListener('DOMContentLoaded', function () {
